@@ -1,0 +1,11 @@
+Get Installer Hash from Package download for the customer
+
+msiexec /i "BEST_downloaderWrapper.msi" /qn GZ_PACKAGE_ID=installerhash REBOOT_IF_NEEDED=1
+
+
+Windows Downloader Link (Grab everything between [..]
+https://cloud.gravityzone.bitdefender.com/Packages/BSTWIN/0/setupdownloader_[..Redacted..].exe
+
+
+
+msiexec /i "BEST_downloaderWrapper.msi" /qn GZ_PACKAGE_ID=..Redacted.. REBOOT_IF_NEEDED=1
