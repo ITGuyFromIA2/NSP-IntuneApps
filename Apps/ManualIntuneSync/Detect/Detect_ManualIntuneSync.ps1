@@ -1,47 +1,49 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
-    }
-exit $lastexitcode
+
+$FinalCheck = @{}
+$Finddd = @"
+EventID=1337]]
+"@
+$ModTask = @{
+    Name = "PushLaunch"
+    Path = ""
+    BackupPath = "C:\Admin\Installers\ORIGINALTask - PushLaunch.xml"
+}
+$Shortcut_Full = "C:\users\Public\Desktop\Manual Sync Intune.lnk"
+
+$ModTask.Path = (Get-ScheduledTask -TaskName $ModTask.Name).taskpath
+
+if ((Get-ScheduledTask -TaskName $ModTask.Name).triggers[-1].subscription.tostring() -match $Finddd) {
+    $FinalCheck.Task = $true
+} else {
+    $FinalCheck.Task = $false
+}
+if (Test-Path $Shortcut_Full) {
+    $FinalCheck.Shortcut = $true
+} else {
+    $FinalCheck.Shortcut = $false
 }
 
-
-write-host "Main script body"
-
-#############################################################################
-#End
-#############################################################################
-
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
-
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
-
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
-
+if ($($FinalCheck.Task) -and $($FinalCheck.Shortcut)) {
+$Exit = 0
+Write-Output "Task and Shortcut Configured Properly"
+} elseif ($($FinalCheck.Task) -and !$($FinalCheck.Shortcut)) {
+$Exit = 1
+Write-Output "Shortcut NOT configured Properly"
+} elseif (!$($FinalCheck.Task) -and $($FinalCheck.Shortcut)) {
+$Exit = 2
+Write-Output "Task NOT Configured Properly"
+} else {
+$Exit = 3
+Write-Output "BOTH Task and Shortcut NOT Configured Properly"
 }
+
+#[environment]::ExitCode($Exit)
+
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUkx10TLxgm1TpLHchjUhoH8mf
+# cmOgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +165,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQU46NL5xF9sLMXXhje7SvLX8zlcokwDQYJKoZIhvcN
+# AQEBBQAEggEAuQRjLlveARGxhDRL6izbsAYpT9hWERQDlNF4LUC3c6qjMFhGcTqe
+# ASyNqAYd6El6h/murzQs3Mg+rXdfi1niVU0SOnI3SJ3KSoa4n0DMH6ydjdTIx0XP
+# ICOURjsQO+YJv8dWllb95+quFj+cr26u3HBhcMV1gI87YDd5alQ5CBWoeqnxK2je
+# SrLK7JwJaWehRDJeQ7of/M+PhF1eaX405HeP4XsezNJYTGOj0SOX5ay+JXw8bw0v
+# zkI4tpDQPIqICj66f1rupF+g2ff0T3elhtJeu9upnqEwRWQaBr26qc2sd9XZa2vv
+# iHtMve3UcsJzZas1M1EcPEOadLLmdJyR+qGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTlaMC8GCSqGSIb3DQEJBDEiBCCNi7cIVjJEf3MU+13ARr0NMbKFwl3x
+# ggOqfS5N2riFCjANBgkqhkiG9w0BAQEFAASCAgAr5uvnKXkwGNdIGiaVad9HxEND
+# C/vF3hGzTr2OxAPbDtAOTI144kJydibhaWKHACA2YApXotwpagGhHPv+msph5lhB
+# 3kWsVK8WKiMbONOb2U2DVophyV3U90qLesJBFSWAN7ldjXTC1m8LgsJ7+MgPg/cd
+# Ot//vXLd8I93snG5tqyNLGHo0bvlMM0rK0rOuM6BfDZWsnL/u6Dc03wDIoIaGUtI
+# 4BbbnWLJV5cyRl0DaEYLWDmm5eFKzzQ3u5YwkvxMCQTa7Cru065ZLMq04O1NnhG/
+# Rq0lF7xCpAy9yZ4kYeHXRl7A8UimSznC5nLcbScwJKdJkr34vAfqGwyNf6rGP5v7
+# u+2aBujphS7Jr0IbAPGJiMsMmSDRnJIDYNQ58hPhLOYXXoK4d05M0SURnfXNKU/6
+# mCE/Y8nwgx38PT/wHFnMM8LxHx5KfQbYGto6aEhwo+gACArRePvVZ97xNicEhz+i
+# QXLWUPUljHtWo6R7zUzLrT1In8WfUkI2Kz/Ev+b2niBHrz2gFXPYBYzA6SukugYm
+# dCwe+mBsdIgNPdCCgue/6N2uAemy9/eHIT6RJwXKq6E0G/ieZIsC3sBIMyWOHfmN
+# pvsjkeLmnXRBdkVo+caDtBbXJvVBYj/WtzB0+3EdSxuHT3rxSGKBviDBwdSAAxlA
+# i9TBbOgWtA+BoRbzpg==
 # SIG # End signature block

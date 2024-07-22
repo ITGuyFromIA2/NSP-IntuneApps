@@ -1,47 +1,48 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
-    }
-exit $lastexitcode
-}
+﻿param ($ServiceName, $DelegateTo)
+start-transcript C:\Admin\Delegate.log
 
+$pattern = "$DelegateTo[\s]*start_stop[\s]*allow*"
 
-write-host "Main script body"
+    if ($psISE) {$BaseDir = Split-Path -Path $psISE.CurrentFile.FullPath    #IF running in ISE, with line by line execution this will work
+    } else {$BaseDir = $PSScriptRoot} 
 
-#############################################################################
-#End
-#############################################################################
+#Copy SetACL from SourceFolder to permanent KNOWN folder
+$ACL_FullDest = "C:\Admin\installers\SetACL.exe"
 
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
+if ((Get-WmiObject -Class Win32_OperatingSystem -Property OSArchitecture).OSArchitecture -like "*64*") {
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
+    $ACL_FullSource = "SetACL_64.exe"
 
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
+} else {
+    $ACL_FullSource = "SetACL_32.exe"
 
 }
+
+copy-item -Path $ACL_FullSource -Destination $ACL_FullDest -Force -ErrorAction SilentlyContinue
+
+$on = "\\127.0.0.1\$($ServiceName)"
+$ACE = """n:.\$($DelegateTo);p:start_stop"""
+
+cmd /c """$ACL_FullDest"" -on ""$on"" -ot srv -actn ace -ace $ACE"
+
+$Test = cmd /c """$ACL_FullDest"" -on ""$on"" -ot srv -actn list" | select-string -Pattern $pattern
+
+if ($Test.Matches) {
+    $ExitCode = 0
+} else {
+    $ExitCode = 1
+}
+
+write-output "Begin Debug Output"
+$StrOut = "ACL_FullSource: ""$ACL_FullSource""`n`nACL_FullDest: ""$ACL_FullDest""`n`nACE: $ACE`n`nON: $on`n`nTest: $Test`n`nExitCode: $ExitCode"
+Write-Output $StrOut
+
+[Environment]::Exit($ExitCode)
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBXWCjm130qptVLPxnu5Jp1kv
+# IR2gghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +164,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQU8/937zBsLsLqPK5d8eJBnwPJbQ0wDQYJKoZIhvcN
+# AQEBBQAEggEAIQMlErQpXp4+eFTOM4A5FTkP89a7t7FBDDy2IvvTf8C90HL0ZwLn
+# c7KQiFSqDolacU/VkUL0D6iMhQtFYLAE3ZBrjuxYlCf3r7JJwG9QQlWAtrOJdI7O
+# fSDfckMBYAH7ITl0VOxUCvQCZRLANwX1RY3iLnFHFMGBGfhPVolRQHPiuGF+2pBf
+# 9Yd/Syl2kphynQiOGNR/U+B7+3oSAwBE+uU5xxDLAEYk2TSHyesDtNVq30/R00qP
+# neJO0olOGVAczVeFnZUB93qNRu6yKC2XylkRWJeaZB+LG2Wqi3h+Bo5Ot87E/HtG
+# f8m1eCk9+FGAY6wQzJSIdtQpJX814TYdyKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTJaMC8GCSqGSIb3DQEJBDEiBCBi/LAYM4FSIt8kPS36idJYQSQRqWfo
+# m1ED39DM5xVHAjANBgkqhkiG9w0BAQEFAASCAgBBtEq3a8i4PXHMw8UKibA7Iu90
+# 0NoZu0Buasc+eqkjDJjTuACa8/MDQSZFdzyR4dCkVIcyUIlOIoJbzCfRPorkBnuc
+# T155HVbcdo4+4RQPQTvfPc7d5r0W5UaAOa/IHiG8u9Ij3CoMXTXNGps5I4LtIc5q
+# mRb0/qxAv2vMi4WUVuUUzCLrw0AnXKmRhkeg6rh1dCms0s66R08/GyH+PX0du5+/
+# Dy9VCn0qFG6VHcQf7SruvUTJWCGMMwh17JjH+dVmtxMFOXEzKMFQfG1/Pb3Sm9mR
+# seIkUB9cJ+CLSMyyjmiXTALzE92N3oRScwBhCyGueh1GB0uRSgpBe9FOh9l6obWQ
+# Tzi3X9k+y/4GYd2pHEpJF7K8G2SKKyFgEd98q/BQCeovV9HRb3eQRJhsAI9yeReC
+# 0KUPPZ/scG0DyoZ/oB9oj2pOJRBNq4gr0G7rgDW61QTmOKo3gnhAVcIoOskkfxYe
+# oeHQUuLIa8DDD5HDJlxLJxwSZQE2B4jJsHt54PmR8Vv+ScmoCoFXFiWOWzaQpb9o
+# QS2TjF3Oo4b1Cwj9Mecl40xuSGwVFNuFKN44C4t7MyQyzCT8HVBYusbXOu2rG2dd
+# CEtvpPm+5d8GKayv2Nyt9NtEhpkhTWi2XVChI+k8rjhjY/sGg3FXoC5/hDGWvUOA
+# JYMEtpYUR+X4R4DLXA==
 # SIG # End signature block

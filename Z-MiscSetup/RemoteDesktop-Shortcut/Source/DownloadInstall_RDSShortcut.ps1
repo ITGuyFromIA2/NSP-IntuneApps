@@ -1,47 +1,15 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
-    }
-exit $lastexitcode
-}
+﻿param ($ServerName, $fullPath)
 
+$BaseString = "screen mode id:i:2`nuse multimon:i:0`ndesktopwidth:i:1920`ndesktopheight:i:1080`nsession bpp:i:32`nwinposstr:s:0,3,0,0,800,600`ncompression:i:1`nkeyboardhook:i:2`naudiocapturemode:i:0`nvideoplaybackmode:i:1`nconnection type:i:7`nnetworkautodetect:i:1`nbandwidthautodetect:i:1`ndisplayconnectionbar:i:1`nenableworkspacereconnect:i:0`ndisable wallpaper:i:0`nallow font smoothing:i:0`nallow desktop composition:i:0`ndisable full window drag:i:1`ndisable menu anims:i:1`ndisable themes:i:0`ndisable cursor setting:i:0`nbitmapcachepersistenable:i:1`nfull address:s:{0}`naudiomode:i:0`nredirectprinters:i:0`nredirectlocation:i:0`nredirectcomports:i:0`nredirectsmartcards:i:1`nredirectwebauthn:i:1`nredirectclipboard:i:1`nredirectposdevices:i:0`ndrivestoredirect:s:`nautoreconnection enabled:i:1`nauthentication level:i:0`nprompt for credentials:i:0`nnegotiate security layer:i:1`nremoteapplicationmode:i:0`nalternate shell:s:`nshell working directory:s:`ngatewayhostname:s:`ngatewayusagemethod:i:4`ngatewaycredentialssource:i:4`ngatewayprofileusagemethod:i:0`npromptcredentialonce:i:0`ngatewaybrokeringtype:i:0`nuse redirection server name:i:0`nrdgiskdcproxy:i:0`nkdcproxyname:s:`nenablerdsaadauth:i:0`n"
 
-write-host "Main script body"
+$FinalURI = $BaseString -f $ServerName
 
-#############################################################################
-#End
-#############################################################################
-
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
-
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
-
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
-
-}
+set-content -Path $fullPath -Value $FinalURI
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzZ4h0MB+FTV8RsIa/ODHT3wK
+# KwegghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +131,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQURwdRHaD8oT1Dyg8cJhdBTsndqLEwDQYJKoZIhvcN
+# AQEBBQAEggEAkNHvPwfJ9ZFeiSxpbHaxef6daWj9D1k3NmlfV+xz3Ga1E/Rqk5wv
+# hSfbOt+TJ9qSSW8Y9UnIPn8znsTLyJjBPXmfGkDiYIG1tMxtrBU2Vs9J/zQfjQ+D
+# j4p/JcfZkR+QH2RmJv+qov2Ooh2m4YKmPyjFz01D/FBJ797M5pdTtG2Lm/0cL/o3
+# u28qJxYNYlzJXcGdc8cHidmy963hVOppAz2/qDwA8HKEjSMkkwqtJKfBom3jX4iN
+# 6VPxrwP4l+uBcYwnotPM1FdgrXGdEOogMzEwXTW024rZcus1IWbCnhCBw782hjYs
+# K0dX9aF51ti7bnEw0Fyp/bJXn2IL5CNxYKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDgxNzM5NTFaMC8GCSqGSIb3DQEJBDEiBCCA5PNT0fRuVOK9/D5r4+wt0QUeuVeS
+# mZDXDqZd2tOhOzANBgkqhkiG9w0BAQEFAASCAgAXkQVHSezw+znj/LIUBt0G6zBs
+# NRHDJEJM+On0SZw46d5ffxmdiUHUZbpKAHMa6bRKC+g5fpWU7ijFYpCzT8nBl3RK
+# gF6ExbF1Ab4D34SYzLEGWOKpID5Q9BR4f7uWjYFS86Ss1e96bGntgUzKWB3Vwz97
+# g8/vbgwMBK5xjMjb8fneSgEgdId1JbVvuj/djeBwI7xiJDieKynCV9SbZblrmgKu
+# Km6OBtBhNLoKN09sG4ZLVreRxROadndzWbhLFsG+8gfRbRSDM9BxXv+IVj9/zt8Z
+# 6Va1z9aNF4ntjMFQsSFXUqyAEwXpR2is9ZLmWgdDAS74JBN5x1naj/e+jOtVHCha
+# FgjtSCSe70ALNWnzalyz2zIWXgZfa4hbNiGgit04DvGSyLfejrbPa0zP1fPAD8zb
+# 9OXSr1kON0TQR3/eXLrebCyLkZeB4oTv+cauN5AYlzfrSY2KoDIFIefS1UJqTbO2
+# LV9hc4OTp9D6dqFlUK+aMkXSkKulYqTn364qa10IUzRrRJnNKJ0S4pHHyFjUh1Je
+# 2YT9AUIahtXGqPt0ofAeWDv2BG0T9UMvpJq+DPtOuJ2lUgZ3AsauuRzkf60ioK41
+# OdUDmEf0H/6/Niwxk7uYXdW7cNyBQAMbBo2mEga5CNdwbH7DjZKQsjGbW2pyAQPN
+# kXNfjyOd/9b7EUNPSw==
 # SIG # End signature block

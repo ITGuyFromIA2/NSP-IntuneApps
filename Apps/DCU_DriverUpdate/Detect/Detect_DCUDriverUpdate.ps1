@@ -1,47 +1,39 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
+﻿Start-Transcript C:\Admin\DCU_DriverScanDetect.log
+$Config = @{}
+$Config.Reg
+
+$Config.Reg = [pscustomobject]@{
+    Path = "HKLM:\SOFTWARE\NSPIntune\DellCommandUpdate\DriverScan"
+    Name = "NeedsUpdate"
+}
+
+$Config.Reg2 = [pscustomobject]@{
+    Path = "HKLM:\SOFTWARE\NSPIntune\DellCommandUpdate\DriverScan"
+    Name = "NeedsRescan"
+}
+
+
+    if ((Get-Item $($Config.Reg.Path)).Property -contains $($Config.Reg.Name)) {
+        $IsPresent = (get-itemproperty -path $($Config.Reg.path) -name $($Config.Reg.Name)).($Config.Reg.Name)
+    } else {
+        $IsPresent = 0
+        if ((Get-Item $($Config.Reg2.Path)).Property -contains $($Config.Reg2.Name)) {
+        if (!(test-path -Path $($Config.Reg2.Path))) {new-item -path $($Config.Reg2.Path) -Force}
+            Set-ItemProperty -Path $($Config.Reg2.path) -Value 1 -name $($Config.Reg2.Name)
+        } else {
+            New-ItemProperty -Path $($Config.Reg2.path) -Value 1 -name $($Config.Reg2.Name) -PropertyType String -Force
+        }
     }
-exit $lastexitcode
-}
 
+    Write-Output $IsPresent
+    Stop-Transcript
+ [Environment]::Exit($IsPresent)
 
-write-host "Main script body"
-
-#############################################################################
-#End
-#############################################################################
-
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
-
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
-
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
-
-}
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUnNuufeIeEJRx9zuaRUld34ud
+# DoegghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +155,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUrz1wX0XXQADNUBBL3eo5DPx52NMwDQYJKoZIhvcN
+# AQEBBQAEggEAiM5GlyoXwR1w+dQ7YrVi/wlWnusDnOvWNYqtDQB9JHiyCePYz3vB
+# T7ZxX52TT/GHE3Oej8u9mZgJvtqSjIjWURtW2NeWRY/JfE8Ly6NGooCdzq8IOwFV
+# 7XxJuBd6OTq0Cg29nX9qwoEZo44P3mTKF6CfVs9JIUNgOTD4IelInRcGOkkmjeQu
+# WjijJkZHMdAjGJqWMl6vgq+Ue0O8ZEX5kbGUNb4h4raWxXl41Me4/lhSXvLGj+zB
+# QNUUUldW+lduS/h/Pkrdp1F/Otp8aecQ8DhWrPrtUoL0R/U1g0HMA89UcC2+RFri
+# WPiqpRS7OKYIBnh3xDXZ68zx9IjdMKWrGKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTBaMC8GCSqGSIb3DQEJBDEiBCAmqWitknkEVR2Z1U5Ap2sCoEjlkgrX
+# vyfl+6mDxOlOpzANBgkqhkiG9w0BAQEFAASCAgCCZZoks58ivcsSsJpBKnDO2etj
+# YTsHbEzu75JxGizflJMHFJvTBu3fqDqHK+yooyklnsLCPjiuOwQbeClIE98G/wSz
+# pT6MsnEsta+q1N/0CUPlYNPHI3kV3XSEBP6X0zHFIrmC15mREryISrHdy403XOmd
+# Sp/y026XShBhVm48OBhsrJ7iBAAe3aY7/wu3kZjL01L2meJMqSSo7SG0mYAqxUn0
+# AE5wKJLA+5giFf4N3xO7xdZGCJjxnrdynKVeF1pOZ9cPbGTrnlTWihn2Rh4OhDrZ
+# eBXVW7iiWq5yoYToMqzOvqRZ4Hb39tzKH33zqio/Sp/O51KDmcZUwbLb01lHFx3X
+# mMgZYgkCdPT7JxleTGLhMZtLoKK8C9pGLZVh79ynE5OMtcIGs7dQvssVnZ/M0j5H
+# zv06hgWyEj0a+J/gURkV5FcIwz5X/M7zRUJEsnV8i8yJ3V/zJlwqz3kra5xC6JsV
+# 0s64vRv4lzfF/0InQ8Wr5r5ZkWVzMks8WBBYHAJ8D2VPEOi39eTKBt49ZN6uDCmp
+# KBpXIZbN3D5PnLV0emz3hi0Ch1Q/Z2rD50eEfYkhQ+N2C6dn+Ww+Hxzzkl7ELflU
+# K3zeLBKRlDQeaz9C7aHGvi4d/uX4uFspDQSbpmLXG0LMPkPFEAB87q++tfrRKiXt
+# nMaHyxUo3Vg8oDxWgg==
 # SIG # End signature block

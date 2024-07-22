@@ -1,47 +1,84 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
-    }
-exit $lastexitcode
+﻿new-item -path C:\admin -ItemType Directory -Force -ErrorAction SilentlyContinue
+start-transcript -Path C:\admin\FortiClientLog.txt -Append -Force
+$Config = @{}
+
+$Config.Link = "https://links.fortinet.com/forticlient/win/vpnagent"
+$Config.InstallerFolder = "C:\admin\Installers"
+
+$Config.Stub_FullDest = (-join($Config.InstallerFolder,"\FortiClient_Stub.exe"))
+$Config.FinalInstaller = (-join($Config.InstallerFolder,"\FortiClientVPN.exe"))
+
+if (!(test-path -path $($Config.InstallerFolder))) {
+    new-item -ItemType Directory -Path $($Config.InstallerFolder)
 }
 
+invoke-webrequest -Uri $($Config.Link) -OutFile "$($Config.Stub_FullDest)" -UseBasicParsing
 
-write-host "Main script body"
+$Monitor = "$env:TEMP\*forticlient*.exe"
 
-#############################################################################
-#End
-#############################################################################
+start-process -FilePath "$($Config.Stub_FullDest)" -WindowStyle Hidden
+
+$LogPrefix = '[A-Za-z]{3,4} [A-Za-z]{3} [0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2} [0-9]{4} - '
+
+$LookIn = "$env:TEMP\FCTInstall.log"
+$LookFor_1=(-join($Logprefix,'end download.'))
+$LookFor_2=(-join($Logprefix,'Installer filename is: FortiClientVPN.exe'))
+#$LookFor_3=(-join($Logprefix,'(?<FullInstaller>C:\\Users\\[\sa-zA-Z0-9\~_-]*\\AppData\\Local\\Temp\\FortiClientVPN.exe)'))
+$LookFor_3=(-join($Logprefix,'(?<FullInstaller>C:\\((Users\\[\sa-zA-Z0-9\~_-]*\\AppData\\Local\\Temp)|(Windows\\TEMP))\\FortiClientVPN.exe)'))
+
+$ExitLoop = $False
+
+do {
+if (get-content -path $Lookin | select-string $LookFor_1) {
+    Write-Output "Matched 1"
+    if (get-content -path $Lookin | Select-String $LookFor_2) {
+        Write-Output "Matched 2"
+        
+        if (get-content -path $Lookin | Select-String $LookFor_3) {
+            #$Temp = get-content -path $Lookin | Select-String $LookFor_3
+            
+            #copy-Item -Path (($Temp.Matches[0]).groups['FullInstaller'].Value) -Destination "C:\admin\installers\FortiClientVPN.exe"
+            $ExitLoop = $True
+    } 
+    }
+}
+} until ($ExitLoop)
+
+$Temp = get-content -path $Lookin | Select-String $LookFor_3
+copy-Item -Path (($Temp.Matches[0]).groups['FullInstaller'].Value) -Destination "$($Config.FinalInstaller)" -Force -ErrorAction SilentlyContinue
+
+get-process -name "*FortiClient*" | Stop-Process -Force -ErrorAction SilentlyContinue
+
+###### ********************************* ##########
+<#
+
+STOP running script here if you ONLY want to get the latest installer. 
+
+#>
+
+cmd /c "$($Config.FinalInstaller) /s"
+$AppName = "FortiClient"
 
 $ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
 $Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
+$App = @(($Programs | Where-Object { $_.DisplayName -like "*$AppName*"}))
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
-
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
-
+if ($App.Count -gt 0) {
+    $Installed="$App Installed"
+    write-output $installed
+    $ExitCode = 0
+     #[Environment]::Exit(0)
+} else {
+    $Installed="$App NOT Installed"
+    write-output $Installed
+    $ExitCode = 1618
 }
+[Environment]::Exit($ExitCode)
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUYHiK1o71djpMGDaS/bwDGqzG
+# yk6gghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +200,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUP8Ao/GtWuKFdmwWegRLVczSHeSQwDQYJKoZIhvcN
+# AQEBBQAEggEARCxQh0o9sgKK4SDCQ3mgH/QwH3mX3D4k388ogB3IB4q6quYlWcyO
+# 3qNlkELP3Dz/Owg0f1qtTDBsX50MZCzHn5sLPiCot5r3nkQ3rYQUhSu7OPt7h/7f
+# znv5ppEymFJHE/SkNzVOxr7m+BhTVKqQ8v1v1GNUHkEddN/CJe2L/iC9Vcrcsy5J
+# /QDvYGjPxj3gi3uxfABOkWG7UFMmMqOvM7uHImZnVWejp1sesHWfGFCu6RjjXzWy
+# V5mkqvUlijn5L1BkRWRtIeGp8HtPMIDxFjdG+9Xqg9iGMHUg+mIPX5PEmcEWTThW
+# SJJRqWnNEw2SR5NUCOdQEvfx88H1popa6KGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTZaMC8GCSqGSIb3DQEJBDEiBCDYaipU6TvhE/DRTzoywLCJgELtuFvo
+# EpO1zoIm6fSyXjANBgkqhkiG9w0BAQEFAASCAgAPsjgUqgn6emjtrhV0qrBBmZzR
+# QY5Z9j1eT7VGRWfqGYATrwVB99uUXDcSezBbcgGOYmxXm3fNMhuMHkLAvNCEtVye
+# XsflG56EUXE9oSKZysgimlI+gnOx1sLjTraSpcoyz8NI2ZX9Hwk61bEsPDDux5HJ
+# CyPsQYqdcAkQaKU1nkjCGf/pWZeMorwTqVHcfVTuRZkNiFPxXEruZ4+1FNIBwdCc
+# TJH+KwTsKl9WGq1wXQziBbpg2pE+fQMuq1tntogYvvSHdL4hbaJbKXl+Bk57SqQz
+# kL54dkJbbirUBky7g3S3Cq7bUpgMuWvO2/jZU9pF6D89GkQfSPgS0CN1yTNrhesy
+# GCy6ZPAH18UBv4vOwVEH/oBym+a25HwM+gc1NYdCK+/T6Iw2uFLEE0w2aQkjbAJS
+# zm60NRXXvWRpymkbV0necqiXIebcwPDRQvMMrTa4W7idDV+OGiw+LtRtxuICRf+J
+# 8hkfg3b5UEVOtRGHfAs88uuon4hEIMPyThm2SO0ULAFRCXc7BINBbSBJNZSNU2Yk
+# jVD9uXtE7Mg7cvV/928uo3lNUwoAISwt1FFq7U7oSICqMPOPowJmJ+yox682XKl1
+# dW3yp/jMF/S9O+zQojMc3ZYXDHAMYlAlavlVevzSSoal1nzbGxWRRm8ABHAH9Ovu
+# KWVphSRS2U8NPJ4oIw==
 # SIG # End signature block

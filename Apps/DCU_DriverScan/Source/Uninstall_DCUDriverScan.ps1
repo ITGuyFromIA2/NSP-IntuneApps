@@ -1,47 +1,119 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
+﻿
+#Get the current working DIR
+    if ($psISE) {$BaseDir = Split-Path -Path $psISE.CurrentFile.FullPath} else {$BaseDir = $PSScriptRoot} 
+    $SharedDefName = "SharedDefs.ps1"
+    $SharedDefs = "$($BaseDir)\$($SharedDefName)"
+    . $SharedDefs
+
+
+#######################Items above this line need to be broken out for dot sourcing (Using across multiple scripts)
+
+
+#Tunable items for script
+   # $Config.DCU.Action = "scan"     #Could be 'scan' / 'applyUpdate'
+   # $Config.DCU.UpdateType = "driver" #Could be
+   # $Config.DCU.AllowReboot = "disable"
+
+
+#Check for #Config.BaseDir and create if not already
+    #if (!(Test-Path -Path "$($Config.BaseDir)")) {new-item -path $($Config.BaseDir) -ItemType Directory}
+
+#Test for $Config.DCU.XMLLogDir and create if needed
+   # if (!(Test-Path -Path $Config.DCU.XMLLogDir)) {new-item -itemtype Directory -Path $Config.DCU.XMLLogDir -Force}
+<#
+
+#Dell Command Update arguments. USES Some of the 'tunable' items from above
+$Config.DCU.args = @()
+$Config.DCU.args += "/$($Config.DCU.Action)"
+$Config.DCU.args += "-silent"
+$Config.DCU.args += "-updateType=$($Config.DCU.UpdateType)"
+$Config.DCU.args += "-report=$($Config.DCU.XMLLogDir)"
+
+#>
+#Clear out Report DIR before scanning for new drivers (DOESN'T REMOVE THE DIR though)
+    Remove-Item -Path "$($Config.DCU.XMLLogDir)" -recurse -Force -ErrorAction SilentlyContinue
+
+#Check for Driver updates, waiting for it to finish
+    #Start-Process -FilePath "$($Config.DCU.EXE)" -ArgumentList $Config.DCU.args -Wait
+<#
+#Check to see how many updates
+$Temp = @(([xml](get-content -Path ((Get-ChildItem -Path $($Config.DCU.XMLLogDir) -Filter "*.xml").FullName))).updates.update)
+
+if ($Temp.Count -gt 0) {
+    $NeedsUpdate = 1
+} else {
+    $NeedsUpdate = 0
+}
+#>
+
+$Config.Reg = @()
+
+$Config.Reg  += [pscustomobject]@{
+    Path = "$($Config.REG_Base)"
+    Name = $Config.REG_Name_LastCheck
+    Type = "REG_SZ"
+    Value = (get-date -f "MM/dd/yy HH:mm")
+}
+
+$Config.Reg += [pscustomobject]@{
+    Path = "$($Config.REG_Base)"
+    Name = $Config.REG_Name_NeedsUpdate
+    Type = "REG_SZ"
+    Value = $NeedsUpdate
+}
+
+$Config.Reg += [pscustomobject]@{
+    Path = "$($Config.REG_Base)"
+    Name = $Config.REG_Name_NeedsRescan
+    Type = "REG_SZ"
+    Value = 0
+}
+
+foreach ($RegEntry in $Config.Reg) {
+    #Test for and create the path to the reg key
+       if (!(get-item $RegEntry.path -ErrorAction SilentlyContinue)) {Write-Output "not Exist; creating."; new-item -path $($RegEntry.Path) -Force}
+
+    if ((Get-Item $($RegEntry.Path)).Property -contains $($RegEntry.Name)) {
+        remove-ItemProperty -Path $($RegEntry.Path) -Name $($RegEntry.Name) -Force -ErrorAction SilentlyContinue
+    } else {
+        #New-ItemProperty -Path $($RegEntry.Path) -Name $($RegEntry.Name) -PropertyType $($RegEntry.Type)
     }
-exit $lastexitcode
-}
-
-
-write-host "Main script body"
-
-#############################################################################
-#End
-#############################################################################
-
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
-
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
-
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
 
 }
+
+
+#Take care of setting up the scheduled task that will periodically run
+
+#Copy from temp Intune DIR to perm dir
+remove-item -Path "$($Config.BaseDir)$($Config.SchedTask_ps1Name)" -Force -ErrorAction SilentlyContinue
+
+remove-item -Path "$((-join($Config.BaseDir,$SharedDefName)))" -Force -ErrorAction SilentlyContinue
+<#
+    $Config.SchedTask.Action_Args = @()
+        $Config.SchedTask.Action_Args += "-executionpolicy bypass"
+        $Config.SchedTask.Action_Args += "-WindowStyle hidden"
+        $Config.SchedTask.Action_Args += "-file ""$($Config.BaseDir)$($Config.SchedTask_ps1Name)"""
+
+
+
+        $FinalArgs = [string]::Join(" ",($Config.SchedTask.Action_Args.GetEnumerator() | %{$_}))
+    $Config.schedTask.Action = New-ScheduledTaskAction -Execute powershell.exe -Argument $FinalArgs
+    $Config.SchedTask.AllowRunTime = New-TimeSpan -Hours 1
+
+    $Config.SchedTask.Settings = New-ScheduledTaskSettingsSet -DisallowDemandStart:$false -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd -ExecutionTimeLimit $Config.SchedTask.AllowRunTime -MultipleInstances IgnoreNew -StartWhenAvailable -WakeToRun:$false
+    $Config.SchedTask.Principal = New-ScheduledTaskPrincipal -UserID "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $Config.SchedTask.trigger = New-ScheduledTaskTrigger -Daily -at 7am 
+
+    $TempTask = New-ScheduledTask -Action $Config.schedTask.Action -Description $Config.SchedTask_Descr -Principal $Config.SchedTask.Principal -Settings $Config.SchedTask.Settings -Trigger $Config.SchedTask.trigger
+#>
+Get-ScheduledTask -TaskName "$($Config.SchedTask_Name)" | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+
+#    Register-ScheduledTask "$($Config.SchedTask_Name)" -InputObject $TempTask
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUj0XQMLuxp9xhtUMJStmt6onX
+# G46gghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +235,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUhtCBfms3N4D3KBxEa3Jdj5EAYr0wDQYJKoZIhvcN
+# AQEBBQAEggEAwVvNZpiWFO302/Z2nFNiQHbRymA/d8rur6bN/nSFq5GjtAZv/bt4
+# wWnOAnfEWMhSfApeEqZobrfnhf6G9oN5st4gxu0ROfnl91HnYg/DINUemHXC/MWx
+# vTzfHeOnLNiCNAL7INnstaqS5syMR4tsHlLXRfcZjnZ89pTW7940b2xeVQC/rEBN
+# N16ivjhBtolNG/dCGQXMi8U9w/ES01I+BqwAyQijpiR/GazbjvDm59cOqjEuXin6
+# DhP7zcPqpkxLd4BvonkXoKU5Ix0VBstlR7z466nZqe/AJlW1mzRMoVUdFmidXxsk
+# xsNOnHGQEcb6emJUdEglbSRA7mn/MCnkGKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MDlaMC8GCSqGSIb3DQEJBDEiBCDaOHDmkk2CZUgi57zP377xWkTC3r3n
+# csqcSdQDvbLnATANBgkqhkiG9w0BAQEFAASCAgBHiZLrx19fVyDQEUbwoEfez66Q
+# V28dN12ovLDkd7aNX549QwWu5S7De1zDHUzx2BvExOuDJyAQDXgkhwmcLVkwv573
+# dez40bcwxO3Ai9vV4HW7VKPxTi0XSsPTjy+R06wFGcmqFH2oawIVL4Kxfd3ctN9g
+# G/QpGY1Npth/phn48jMRZjTk8qNepiyx375YQuFTm5x7oYOqKwanBlJjG5O8nn7J
+# ix9KcETlPUkG25i1xhS5gDlBS9Z+jIxFY1VYuSdDYw6SANB1bpeL4222RAz8A7m2
+# 6bt+++cKY/pp5mUa3Plko+dBuQl1aO3ahBj9l4qUpJAZ1O4y6zvSaczck9lgE/S4
+# e7UzVhPyRvvZ0OthTl07Z8QNyjAKKvMxdSKO4KYTbHIUhP8SNpyMBfNev2DLbMXy
+# hLRnG5/ztuCHL4Wpk1+S02XMZJE9UPpWHWsDwWItx4B6jE9oVmz9ak4hASmKkW97
+# jtixYRvfGYrbRo+UJGyWzzzXWcgtrdKe1vxiFwDnPDHIFJiN85vUq025K4+jOYv5
+# +NRfP1Dh0m8FVbqZPX8olDXserkT9MMlg1oKvifWzQEy97YwFT44I7XHuPsXDuHz
+# jksBh8dM3T5nKmQEhCiBNyjJK2+BBPXiGNgzwexd3daVFxIF7apD6rU4KbFSsJNN
+# cVy72gmXc3TbrQIzbw==
 # SIG # End signature block

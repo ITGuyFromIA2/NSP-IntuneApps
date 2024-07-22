@@ -18,30 +18,134 @@ write-host "Main script body"
 #############################################################################
 #End
 #############################################################################
+start-transcript c:\admin\installers\DellCommand_Download.log
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;
+
+$wgetArgs = '--header="Accept: text/html" --user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:21.0) Gecko/20100101 Firefox/21.0" --no-check-certificate'
+
+
+$Config = @{};
+#Length of ID in DownloadString
+    $Config.DriverIDLength = 5;
+
+$Config.DestFolder = "C:\admin\Installers";
+
+new-item -path $Config.DestFolder -ItemType Directory -Force -ErrorAction SilentlyContinue;
+
+<#
+$Config.DCU_Webpage_Package = (-join($Config.DestFolder,"\DCU_Webpage_Package.html"));
+
+#most of this first stuff is to handle WGet requirements
+    $Config.BaseURL = "https://eternallybored.org/misc/wget/";
+    $Config.WGet_NSP_64 = "https://at.netsysplus.com/LabTech/Transfer/Utilities/wget_1_21_4_64.exe";
+    $Config.WGet_NSP_32 = "https://at.netsysplus.com/LabTech/Transfer/Utilities/wget_1_21_4_32.exe";
+    $Config.WGet_FullDest = "C:\windows\system32\wget.exe";
+
+    $Config.pattern32 = '<a href="[0-9]\.[0-9]{1,3}\.[0-9]{1,2}\/32\/wget.exe';
+    $Config.pattern64 = '<a href="[0-9]\.[0-9]{1,3}\.[0-9]{1,2}\/64\/wget.exe';
+
+    if ([Environment]::Is64BitOperatingSystem) {
+        $Config.UsePattern = $Config.pattern64;
+    } else {
+        $Config.UsePattern = $Config.pattern32;
+    }
+
+
+    try {
+        $Test = $null;
+        $Test = Invoke-WebRequest -Uri $Config.BaseURL -UseBasicParsing;
+
+    } catch {}
+
+    if (!($Test)) {
+
+        if ([Environment]::Is64BitOperatingSystem) {
+            $Config.FinalURL_WGet = $Config.WGet_NSP_64;
+        } else {
+            $Config.FinalURL_WGet = $Config.WGet_NSP_32;
+        }
+
+    } else {
+
+        $Config.FinalAppend = (((((Invoke-WebRequest -Uri $Config.BaseURL -UseBasicParsing).links | Select-String -Pattern $($Config.UsePattern))[0].ToString()).split("="))[2]).Split('"')[1];
+        $Config.FinalURL_WGet = (-join($Config.BaseURL,$Config.FinalAppend));
+    }
+
+#Download & Unblock WGet from wherever it was determined was available (Source or NSP)
+    Invoke-WebRequest -Uri $($Config.FinalURL_WGet) -UseBasicParsing -OutFile $($Config.WGet_FullDest);
+    Unblock-File -Path $($Config.WGet_FullDest);
+
+#Get Main KB Article with list of versions / links (NOTE: These are not viewable in a browser, but are in the HTML)
+    $TempContent = (Invoke-webrequest -URI "https://www.dell.com/support/kbdoc/en-us/000177325/dell-command-update.html" -UseBasicParsing).Content;
+
+#Parse the latest version, should be the first listed.
+    $LatestVersion = (($TempContent) | select-string 'Dell Command \| Update (?<Versions>[0-9].[0-9])' -AllMatches).matches | ForEach-Object { $_.Groups['Versions'].Value } | Sort-Object -Descending | Select-Object -First 1;
+
+
+
+#Find DCU Download page in content
+    $DCU_Webpage = ((($TempContent) | Select-String "https:\/\/www\.dell\.com\/support\/home\/en-us\/drivers\/DriversDetails\?driverId\=[0-9a-zA-Z]{$($Config.DriverIDLength)}").Matches).value;
+
+#Download DCU Webpage with WGet. Need to implement DL for this to prepare new machines.
+   wget.exe --header="Accept: text/html" --user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:21.0) Gecko/20100101 Firefox/21.0" --no-check-certificate "$DCU_Webpage" --output-document="$($Config.DCU_Webpage_Package)";
+
+
+#These next few steps were folded together into the one-liner that follows
+        <#
+        $LastStep = get-content -path DCU_Webpage_Package.html | Select-String 'DellDndDD.FileDetails = JSON.parse'
+        $LastStep | Select-String 'DellDndDD.FileDetails = JSON.parse'
+
+        $LastStep.split('h') | select-string 'ttps'
+
+        $TempSplit = ((($LastStep.Line).Split('h'))[7]).Split('\')[0]
+        #>
+
+#Parse out the final Download URL
+    #$Config.FinalURL = (-join('h',(((get-content -path "$($Config.DCU_Webpage_Package)" | Select-String 'DellDndDD.FileDetails = JSON.parse').Line).Split('h') | select-string 'ttps').Line.Split('\')[0]));
+    $Config.FinalURL = ("https://at.netsysplus.com/LabTech/Transfer/Software/Dell/Dell-Command-Update-Windows-Universal-Latest.exe");
+    write-output "Final URL for package: $($Config.FinalURL)"
+
+$Config.FinalInstaller_Name = $($config.FinalURL.Split("/")[-1]);
+$Config.FinalInstaller_FullDest = (-join($Config.DestFolder,"\",$Config.FinalInstaller_Name));
+
+
+#$Config.FinalInstaller_FullDest = (-join($Config.DestFolder,"\Dell-Command-Update-Windows-Universal-Latest.exe"));
+#Use WGet to download the final URL
+Invoke-WebRequest -Uri $($Config.FinalURL) -OutFile $($Config.FinalInstaller_FullDest)
+
+
+
+#    wget.exe --header="Accept: text/html" --user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:21.0) Gecko/20100101 Firefox/21.0" --no-check-certificate $($Config.FinalURL) --output-document="$($Config.FinalInstaller_FullDest)";
+        wget.exe --header="Accept: text/html" --no-check-certificate $($Config.FinalURL) --output-document="$($Config.FinalInstaller_FullDest)";
+#Remove-Item -Path $Config.DCU_Webpage_Package;
+
+cmd /c """$($Config.FinalInstaller_FullDest)"" /s";
+
+$AppName = "Dell Command | Update"
 
 $ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
 $Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
+$App = @(($Programs | Where-Object { $_.DisplayName -like "*$AppName*"}))
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
-
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
-
+if ($App.Count -gt 0) {
+    $Installed="$App Installed"
+    write-output $installed
+     #[Environment]::Exit(0)
+     $ExitCode = 0
+} else {
+    $Installed="$App NOT Installed"
+    write-output $Installed
+     #[Environment]::Exit(1)
+     $ExitCode = 1
 }
+stop-transcript
+[Environment]::Exit($ExitCode)
+#cmd /c "$($Config.FinalInstaller_FullDest) /passthrough /x /s /v""/qn"""
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUQQBKB2tX7k1tYVd70ftMWdD7
+# 6higghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +267,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUE0+gLqNzt54+5+C7qe4QEoWL0ckwDQYJKoZIhvcN
+# AQEBBQAEggEAacJch5iTxMSpuxpKAecmVZnpFqcV0kOdjbwEpcImiMe9oTCVsHfJ
+# BmYShr2rCi1T2fuTf7G8AgRzm7Sf3Qt8IRONAHFUMFoKTEUgoSdebL2e+jfPbll8
+# 295nearRvVdF+icq2Qsc/uO3uJz+j26zeV9UsrqaJgJBpcd5kbPG+X4bLXbgkLZL
+# +rLWBbDzzBEgE4C8s4MfCKaHjbpxRBcH4F5INWv7ziWI16ZO/2Z9a1/omhKQ6ztX
+# vqcDTyBnmD1irmsiM5+8YYXNeJsUGouoRzy18uA8CHYm8fuKAdP7asfV8Zrn8+m3
+# Ete+AljIuhuge0eba3eO+twaQwiK3PUH1KGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTNaMC8GCSqGSIb3DQEJBDEiBCAR+ICVDBtaM0owiUDMVmUwkaHHsBXu
+# zhpyuMKm0aghazANBgkqhkiG9w0BAQEFAASCAgA0Ya9Unw0dbz5rFwtEVRiS3w5F
+# XSpB/8HYq4tIWP/zRl3Dr/8FlvQFLEHKugvhqhvsuVRk0oXO0Q5+kv+4BNc5ku2R
+# TB6NjOtQ80JlMn0oycZkmFCfXK4vFV05NL+gIcquh5/Ae6ix7qb+vKz90j9JoxgU
+# ssyNdU4U+qGdmU/mNqo+jw2jqRx6ndKYtVQgWuGuaHITR0w3uTanqw0WSnDGmWFb
+# YOMc4uaZYvHrbvaLM8hDacdzvu1FieRG6NyEz+LKn6sCkZ0rTHE4MDal9oxBSmry
+# ompWXWrEcMHDS6hbHtCRluLAvSvZlCd92/CXf2S7pT1DXvUDZZ1fTDffncAWBBg0
+# 44BONYlqm8M+9L0v0mzK6hmxZw48ljAoC2kBYfMS3MrXBi0auW7PtglcBlTsj4nh
+# Q7Z/GYkkRd0LuGRtwOX8y8c1ZATLkfu+snSTNAigSB01G5tBb3ttGVavkr3FyUuH
+# EJMhqsjYVtnfGxF6aDhF0eq0r6xfZSbH18KzUvX/aIuYnnmXsGwt9zICSSwpXHl9
+# 1kOV63kWza5e7ATdki8zXahNe4J3NdorJuCN+fPd+uu/QggXC9XVR05QOUA35yXr
+# l3UnLisFbgPbqPnibutUHZS5xT/Llm6SJRcj0Vj0auuF6M+8BHf420IOb6/BJ8eN
+# kre730W/B3UDLUUOlA==
 # SIG # End signature block

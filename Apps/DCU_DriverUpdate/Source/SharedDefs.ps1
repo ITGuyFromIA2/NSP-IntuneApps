@@ -1,47 +1,33 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
-    }
-exit $lastexitcode
-}
+﻿$Config = @{}
+$Config.DCU = @{}
+
+#Directories and paths for this script
+    $Config.BaseDir = "C:\Admin\DCU_Scripts\"
+    $Config.DCU.XMLLogDir = "$($Config.BaseDir)DriverScanXML";  
+    $Config.DCU.XMLLogDir_Apply = "$($Config.BaseDir)DriverUpdateXML";
+    $Config.REG_Base = "HKLM:\SOFTWARE\NSPIntune\DellCommandUpdate\DriverScan"
+    $Config.REG_Name_LastCheck = "LastCheck"
+    $Config.REG_Name_NeedsUpdate = "NeedsUpdate"
+    $Config.REG_Name_NeedsRescan = "NeedsRescan"
+    $Config.REG_Name_UpdatesApplied = "UpdatesApplied"
 
 
-write-host "Main script body"
+    #Path to Dell Command Update CLI
+    $Config.DCU.EXE = """$($Env:ProgramFiles)\Dell\CommandUpdate\dcu-cli.exe"""
 
-#############################################################################
-#End
-#############################################################################
 
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
+    $Config.SchedTask = @{}
+    $Config.SchedTask_Name = "Dell Command - Reset Update Scan Status"
+    $Config.SchedTask_Descr = "Works with Intune to re-scan for driver updates"
+    $Config.SchedTask_ps1Name = "DCU_ResetScan_SchedTask.ps1"
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
+    $config.MainDellCommand_IntuneAppName = "Dell Command | Update"
 
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
-
-}
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU2t2Ru8bgt8ppw4OMLOlnDZ6B
+# ArCgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +149,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQU+1rm//ZJCMphcsYyGFnv95U6OJ4wDQYJKoZIhvcN
+# AQEBBQAEggEALukQZtAO6R566z6cjPfrsUJGHXrmLCmezUpuavJ4JOR2OLvheMG9
+# gdVNWIkFcW+wT3UaE4wkJxAqgE0pUd05JT4MMXgkI3/m9AwwusRNE9xWu6OGqaLN
+# 92D7kV/TytSo7SBD86VSNb7+NgwGyTlfNIZRe0kG36eoqWKFadePbJtVRRPOvScG
+# vTLI8supS5EdAhPMncu2WHr3Snz53rSnTXxMV0FWTHec0oduHbIi59MW06OYE3dP
+# qs/laE2AT7aLco/tkCXsByjInv0I1ZAiNwgtp8zOL+HxXXgqkXm4IoljYMQWfQSp
+# yyO5olQCNkRFxvKP5qSlvb3+6u0xyFczgqGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTBaMC8GCSqGSIb3DQEJBDEiBCAApy2Fz8remzP3mKoopYwbvX6OR4m7
+# HMnRVKqRv+2dYTANBgkqhkiG9w0BAQEFAASCAgBOhZ7ajSoZe16NGEIsFDzpoBPK
+# oV4hWcrtS0X9/CAJDjYUz3oRKtFGHcQugIXAG4XORN44XkB5RDsCABQcW/I7pGVl
+# Ya4LXJK8ddr2eqt1zbLM25j/5Ckv/HNAWVl8asZLB+GJs8Krb71kLmhoy9yNV9hw
+# TJwwPXQ9RN7sOq5DbFWJGOU3e8KOs9+dOV093FWVO9njTM2JdRNjJQStEqFjk/Bs
+# bDRfaLlb+DFBPwhEdaFsCTegxu/T83hTh6MBmO46m9jz17lzdM/7QR5BXhKxhcNL
+# VSFd6XkQ3jCEgZy8MzoxOUXGcWsx5fufM33ge3qg3S2Uw27yR92lwpGRv9JAQfTy
+# NhhXPzoGHOY6fcxgu1m+rwibkrdF5PhwUcPZXbREOtqaTo0Fe9zayduZt8yidb+A
+# PXZpfuxBuWx33UtGKCob3l2fI3XQdiCWqgrAHHmlo8kmgOVMOvcKWS62YN6KRpBz
+# vrPra30HyE1IBktCW7hLGlb0t9rNOq07729tUY66KeKMJ1oCCEnUEMmgfpQ0CCcj
+# DHQph7EEXxgVbQsalaccejzHLZymcw4NAI6WdlQKXFJUagiQAtH6dAXmpdbmhGbe
+# DOP3Iqw6bwkgqZzEclc7qOaPf+ahLEDqqPjfa9rjRJ7FPTzCzizEcdisj7RVbAuE
+# B4mwM6mV9rJ7f8R7iA==
 # SIG # End signature block

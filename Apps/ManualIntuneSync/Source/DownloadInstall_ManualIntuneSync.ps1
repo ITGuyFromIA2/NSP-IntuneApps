@@ -1,47 +1,130 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
-    }
-exit $lastexitcode
+﻿$ModTask = @{
+    Name = "PushLaunch"
+    Path = ""
+    BackupPath = "C:\Admin\Installers\ORIGINALTask - PushLaunch.xml"
+}
+$Shortcut_Full = "C:\users\Public\Desktop\Manual Sync Intune.lnk"
+
+
+$ModTask.Path = (Get-ScheduledTask -TaskName $ModTask.Name).taskpath
+
+if (!(test-path -Path $ModTask.backuppath)) {
+
+    set-content -path $modTask.BackupPath -Value (Export-ScheduledTask -TaskName $ModTask.Name -TaskPath $ModTask.Path) -Force
+}
+$Existing = [xml](Export-ScheduledTask  -TaskName $ModTask.Name -TaskPath $ModTask.Path)
+
+
+$modify = $Existing
+
+
+$element1 = "EventTrigger"
+$element2 = "Enabled"
+$element3 = "Subscription"
+
+
+$EventTrigger_node = $Modify.CreateElement($element1, $Modify.task.NamespaceURI)
+#$EventTrigger_node.OuterXml
+#$EventTrigger_node.RemoveAttribute("xmlns")
+
+#$EventTrigger_node.InnerXml = @"
+#<Enabled>true</Enabled>
+#<Subscription><QueryList><Query Id="0" Path="Application"><Select Path="Application">*[System[Provider[@Name='Microsoft Intune Management Extension'] and EventID=1337]]</Select></Query></QueryList></Subscription>
+#"@
+
+
+$Enabled_element = $Modify.CreateElement($element2, $Modify.task.NamespaceURI)
+    $EventTrigger_node.AppendChild($Enabled_element)
+
+    $EventTrigger_node.Enabled = "true"
+
+$Subscription_element = $Modify.CreateElement($element3, $Modify.task.NamespaceURI)
+    $EventTrigger_node.AppendChild($Subscription_element)
+
+    #$EventTrigger_node.Subscription
+
+#    $EventTrigger_node.Subscription =  @"
+#&lt;QueryList&gt;&lt;Query Id="0" Path="Application"&gt;&lt;Select Path="Application"&gt;*[System[Provider[@Name='Microsoft Intune Management Extension'] and EventID=1337]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;
+#"@
+
+
+$EventTrigger_node.Subscription = @"
+<QueryList><Query Id="0" Path="Application"><Select Path="Application">*[System[Provider[@Name='Microsoft Intune Management Extension'] and EventID=1337]]</Select></Query></QueryList>
+"@
+
+$Modify.Task.Triggers.AppendChild($EventTrigger_node)
+
+Register-ScheduledTask -Xml $modify.OuterXml -TaskName $($ModTask.Name) -TaskPath $($ModTask.Path) -Force
+
+
+
+
+$ScriptFile = @{
+FullDest = "C:\Admin\installers\ManualIntuneSync.ps1"
+Content = @"
+$Servname = "IntuneManagementExtension";
+Stop-Service -Name $Servname;
+Start-Service -Name $Servname;
+Write-EventLog -LogName Application -Source "Microsoft Intune Management Extension" -EventId 1337 -Message "Perform Manual Sync"
+"@
 }
 
+set-content -Path $ScriptFile.fullDest -Value $ScriptFile.content
 
-write-host "Main script body"
 
-#############################################################################
-#End
-#############################################################################
 
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
+$WshShell = New-Object -comObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut($Shortcut_Full)
+$Shortcut.TargetPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+$Shortcut.Arguments = "-executionpolicy bypass -WindowStyle hidden -File ""$($ScriptFile.FullDest)"""
+#$Shortcut.IconLocation = 
 
-foreach ($a in $App) {
+$Shortcut.Save()
 
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
 
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
+$bytes = [System.IO.File]::ReadAllBytes($Shortcut_Full)
+$bytes[0x15] = $bytes[0x15] -bor 0x20 #set byte 21 (0x15) bit 6 (0x20) ON
+[System.IO.File]::WriteAllBytes($Shortcut_Full, $bytes)
 
+
+
+$FinalCheck = @{}
+$Finddd = @"
+EventID=1337]]
+"@
+
+if ((Get-ScheduledTask -TaskName $ModTask.Name).triggers[-1].subscription.tostring() -match $Finddd) {
+    $FinalCheck.Task = $true
+} else {
+    $FinalCheck.Task = $false
 }
+if (Test-Path $Shortcut_Full) {
+    $FinalCheck.Shortcut = $true
+} else {
+    $FinalCheck.Shortcut = $false
+}
+
+if ($($FinalCheck.Task) -and $($FinalCheck.Shortcut)) {
+$Exit = 0
+Write-Output "Task and Shortcut Configured Properly"
+} elseif ($($FinalCheck.Task) -and !$($FinalCheck.Shortcut)) {
+$Exit = 1
+Write-Output "Shortcut NOT configured Properly"
+} elseif (!$($FinalCheck.Task) -and $($FinalCheck.Shortcut)) {
+$Exit = 2
+Write-Output "Task NOT Configured Properly"
+} else {
+$Exit = 3
+Write-Output "BOTH Task and Shortcut NOT Configured Properly"
+}
+
+[environment]::ExitCode($Exit)
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUQcq3Nds/dV75XEHns2aH/AOP
+# gxWgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +246,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQU0k/0sEUXtD4+8EhGRoL4HOJgEagwDQYJKoZIhvcN
+# AQEBBQAEggEAtk27LQiUem91hzZW+41Q4ue4bAGQEzG6TYah2Ku3fPK3Rq/RTAY8
+# YcYkOJGYpDgjKaOSyAL/eiG8NG/hU07q3PfMq+ajO/F29m6vZ83apBSp0kGuCogv
+# vJbFo2ObSM3OuuTnY67TOIX2G02+UUIZ8/wccQU4xkpR20OIxR8ipK4suwljBEuM
+# Pyy4NfpqYVhwEVEMXhSAfmFgKAnUIxkM1t+P5odxWPmGMQD/4zSZ0k+3KG9dVDzy
+# mX85XnJYEemHmyx3iv8XDX4y6ogONrzR1/HSF/+RKr5DlZ9me0OUKm2PQ5nGsKkt
+# 3+ehVsVNvsAMlUEpdcI3mNjUQeS//rxKOKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTlaMC8GCSqGSIb3DQEJBDEiBCCRoGFco4fVE81FztOu9DqJoFr0xykV
+# 32s1D19SlfORNTANBgkqhkiG9w0BAQEFAASCAgAdwWuezy5/XMAC64MdJY/2rY9f
+# nmSit0UZF3o75SAZZ2Ni8a+DCQAp6G0QBeVsv/YUm6RzbRyNJbnZOWp1XuBcJ3XK
+# FTMMA4BS2jZYPs3CerQ4d3dRQFBIypPudhahjuGpg7WcORm7ac2AzsD7HeyFlBtE
+# 1vjw77uO87fzI1QFJGvfhHeXGrhfr4PG6altI5U5wovn6vNGamDsg5WzQsgSYpO8
+# ilOj13S7qGxpldPifLdLpz8g1j7u/AkqR9nQSG0eI/N/1CrLwkvunWJ4MW7XXATM
+# i1GeOjbrf7vR326TiQ6+1vyZVOvKueqXFb5zpdQT8FA06zx8fn4Skngy0tg4zhvb
+# CBdJHI99QbinqR+1Y04VVGKOM9HGRXbA0HLDEYV4cHFvcATewkC34gHw2B4YTPE/
+# veMadfP5bfdjBA3FiZFr7G6L63hPH88Ng5UiuX8Ziv2bWcZR4F0W6GGLjscw9VkD
+# wM9fnXQYrOQPqmQOa85WihLN+jtZvPwzw9QRMTK2TByqtadWOyxPizp3s6l/m7ei
+# 07UL4b5EHL56s7sIg1Bd4HhOT7BRApmPn9WcbUya8Ns8aYgfVEOKbUIfrLNSCtZH
+# E/Ws6hlMc2egbAskW1Sobm25EJaATp8jClJRIg95qIArwG5aQOzys7HkOAY7Amk8
+# J49G9CMi31A4Fkzt1Q==
 # SIG # End signature block

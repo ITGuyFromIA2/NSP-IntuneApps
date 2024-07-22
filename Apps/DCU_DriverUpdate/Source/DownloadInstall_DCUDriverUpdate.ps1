@@ -1,8 +1,10 @@
-﻿#############################################################################
+﻿
+#############################################################################
 #If Powershell is running the 32-bit version on a 64-bit machine, we 
 #need to force powershell to run in 64-bit mode .
 #############################################################################
 if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
+    start-transcript c:\admin\DCU_DriverUpdate_elevate.log
     write-warning "Y'arg Matey, we're off to 64-bit land....."
     if ($myInvocation.Line) {
         &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
@@ -15,33 +17,181 @@ exit $lastexitcode
 
 write-host "Main script body"
 
+start-transcript c:\admin\DCU_DriverUpdate.log
 #############################################################################
 #End
 #############################################################################
+#Get the current working DIR
+    if ($psISE) {$BaseDir = Split-Path -Path $psISE.CurrentFile.FullPath} else {$BaseDir = $PSScriptRoot} 
+    $SharedDefs = "$($BaseDir)\SharedDefs.ps1"
+    set-executionpolicy bypass -force
+    . $SharedDefs
 
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
+    #Changing this as I'm re-using code from the first step
+    $Config.DCU.XMLLogDir = $Config.DCU.XMLLogDir_Apply
+    write-output "Current BaseDir: $($BaseDir)"
+    write-output "Path to Shared Defs: $($SharedDefs)"
+    write-output "Path to XMLLogDir: $($Config.DCU.XMLLogDir)"
+#######################Items above this line need to be broken out for dot sourcing (Using across multiple scripts)
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
 
-foreach ($a in $App) {
+#Tunable items for script
+    $Config.DCU.Action = "applyUpdates"     #Could be 'scan' / 'applyUpdate'
+    $Config.DCU.UpdateType = "driver" #Could be
+    $Config.DCU.AllowReboot = "disable"
 
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
 
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
+#Check for #Config.BaseDir and create if not already
+    if (!(Test-Path -Path "$($Config.BaseDir)")) {new-item -path $($Config.BaseDir) -ItemType Directory}
+
+#Test for $Config.DCU.XMLLogDir and create if needed
+    if (!(Test-Path -Path $Config.DCU.XMLLogDir)) {new-item -itemtype Directory -Path $Config.DCU.XMLLogDir -Force}
+
+
+#Dell Command Update arguments. USES Some of the 'tunable' items from above
+$Config.DCU.args = @()
+$Config.DCU.args += "/$($Config.DCU.Action)"
+$Config.DCU.args += "-silent"
+$Config.DCU.args += "-updateType=$($Config.DCU.UpdateType)"
+#$Config.DCU.args += "-report=$($Config.DCU.XMLLogDir)"
+
+
+#Clear out Report DIR before scanning for new drivers (DOESN'T REMOVE THE DIR though)
+    Remove-Item -Path "$($Config.DCU.XMLLogDir)\*" -Force -ErrorAction SilentlyContinue
+
+#Check for Driver updates, waiting for it to finish
+    Start-Process -FilePath "$($Config.DCU.EXE)" -ArgumentList $Config.DCU.args -Wait
+
+#Check to see how many updates
+$Temp = @(([xml](get-content -Path ((Get-ChildItem -Path $($Config.DCU.XMLLogDir) -Filter "*.xml").FullName))).updates.update)
+
+if ($Temp.Count -eq 0) {
+    $NeedsUpdate = 1
+} else {
+    $NeedsUpdate = 0
+}
+
+$Config.Reg = @()
+
+$Config.Reg += [pscustomobject]@{
+    Path = "$($Config.REG_Base)"
+    Name = $Config.REG_Name_NeedsUpdate
+    Type = "REG_SZ"
+    Value = $NeedsUpdate
+}
+
+$Config.Reg += [pscustomobject]@{
+    Path = "$($Config.REG_Base)"
+    Name = $Config.REG_Name_UpdatesApplied
+    Type = "REG_SZ"
+    Value = 1
+}
+
+#Process and replace the 'Type' with the PowerShell versions
+foreach ($RegEntry in $Config.Reg) {
+switch($RegEntry.Type) {
+"REG_SZ" {$RegEntry.Type = "String"}
+"REG_BINARY" {$RegEntry.Type = "Binary"}
+"REG_EXPAND_SZ" {$RegEntry.Type = "ExpandString"}
+"REG_DWORD" {$RegEntry.Type = "DWord"}
+"REG_QWORD" {$RegEntry.Type = "QWord"}
+"REG_MULTI_SZ" {$RegEntry.Type = "MultiString"}
+default {$RegEntry.Type = "Unknown"}
+}
+}
+
+
+
+foreach ($RegEntry in $Config.Reg) {
+    #Test for and create the path to the reg key
+       if (!(get-item $RegEntry.path -ErrorAction SilentlyContinue)) {Write-Output "not Exist; creating."; new-item -path $($RegEntry.Path) -Force}
+
+    if ((Get-Item $($RegEntry.Path)).Property -contains $($RegEntry.Name)) {
+        set-ItemProperty -Path $($RegEntry.Path) -Name $($RegEntry.Name) -Value $($RegEntry.Value)
+    } else {
+        New-ItemProperty -Path $($RegEntry.Path) -Name $($RegEntry.Name) -PropertyType $($RegEntry.Type) -Value $($RegEntry.Value)
+    }
 
 }
+
+
+#Take care of setting up the scheduled task that will periodically run
+
+#Copy from temp Intune DIR to perm dir
+#copy-item -Path "$($BaseDir)\$($Config.SchedTask_ps1Name)" -Destination "$($Config.BaseDir)" -Force
+
+#copy-item -Path "$SharedDefs" -Destination "$($Config.BaseDir)" -Force
+
+  #  $Config.SchedTask.Action_Args = @()
+        #$Config.SchedTask.Action_Args += "-executionpolicy bypass"
+        #$Config.SchedTask.Action_Args += "-WindowStyle hidden"
+        #$Config.SchedTask.Action_Args += "-file ""$($Config.BaseDir)$($Config.SchedTask_ps1Name)"""
+
+
+
+        #$FinalArgs = [string]::Join(" ",($Config.SchedTask.Action_Args.GetEnumerator() | %{$_}))
+    #$Config.schedTask.Action = New-ScheduledTaskAction -Execute powershell.exe -Argument $FinalArgs
+    #$Config.SchedTask.AllowRunTime = New-TimeSpan -Hours 1
+
+    #$Config.SchedTask.Settings = New-ScheduledTaskSettingsSet -DisallowDemandStart:$false -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd -ExecutionTimeLimit $Config.SchedTask.AllowRunTime -MultipleInstances IgnoreNew -StartWhenAvailable -WakeToRun:$false
+    #$Config.SchedTask.Principal = New-ScheduledTaskPrincipal -UserID "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $Config.SchedTask.trigger = New-ScheduledTaskTrigger -once -At ((get-date).AddMinutes(30))
+
+    #$TempTask = New-ScheduledTask -Action $Config.schedTask.Action -Description $Config.SchedTask_Descr -Principal $Config.SchedTask.Principal -Settings $Config.SchedTask.Settings -Trigger $Config.SchedTask.trigger
+    $Triggers = @()
+
+
+$TempTask = Get-ScheduledTask -TaskName "$($Config.SchedTask_Name)"
+
+$Triggers += $TempTask.Triggers
+$Triggers += $Config.SchedTask.trigger
+
+    set-ScheduledTask "$($Config.SchedTask_Name)" -Trigger $Triggers
+
+
+    $pendingRebootTests = @(
+    @{
+        Name = 'RebootPending'
+        Test = { Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing'  Name 'RebootPending' -ErrorAction Ignore }
+        TestType = 'ValueExists'
+    }
+    @{
+        Name = 'RebootRequired'
+        Test = { Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update'  Name 'RebootRequired' -ErrorAction Ignore }
+        TestType = 'ValueExists'
+    }
+    @{
+        Name = 'PendingFileRenameOperations'
+        Test = { Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'PendingFileRenameOperations' -ErrorAction Ignore }
+        TestType = 'NonNullValue'
+    }
+)
+$RebootNeeded = 0
+foreach ($test in $pendingRebootTests) {
+    $result = Invoke-Command -ScriptBlock $test.Test
+    if ($test.TestType -eq 'ValueExists' -and $result) {
+        $true
+        $RebootNeeded += 1
+    } elseif ($test.TestType -eq 'NonNullValue' -and $result -and $result.($test.Name)) {
+        $true
+        $RebootNeeded += 1
+    } else {
+        $false
+    }
+}
+
+if ($RebootNeeded -gt 0) {
+    $ExitCode = 1641
+} else {
+    $ExitCode = 0
+}
+    Stop-Transcript
+exit $ExitCode
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUiF9rrcOgwbJS2NP/0uLAVfT2
+# l8KgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +313,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUe9uaM+d1fiu6oZqavuWYMD2Y2SowDQYJKoZIhvcN
+# AQEBBQAEggEAP4iQgJnSutEoE3/cx+HN9FZ9NvMms5z5EQsPewbeAh+CDLZh2oRi
+# GW5xtX5insTzJ/tDmW8zWF7uRqcVZmWnIjLwzfj3zEu66B7OVjiaaOPv9RdpA8rL
+# DUdsNfjp6gAsJZqTHpN4abQkzeMNDuM2GGb+lvZFCOefI3lb7p3O2r5ETqEWq3e/
+# JuGoyL45McRxuC+3ruBLLkxSxRhVs1Ykwg0LyZlnLJiT9oPoAQTQM+CvpDmaUcIj
+# cOV5leHwXSswyZ40Z+lb2o1w12fD+8gWxieU+/p2O1utOXqcA26oyHqNMCCX4OmB
+# 2jZsotms09bAQSQWSlxxMVyt6fPOmE+gOKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTBaMC8GCSqGSIb3DQEJBDEiBCAjmB+nqrX5MjJIYHo4EJZsiq1dgzW3
+# b6+4lxTBP09+DzANBgkqhkiG9w0BAQEFAASCAgCgpb5TqyfDcazrITtafwbudBu5
+# UT9kq+TNy/FQm3JDccy4fPECaDLasy7cbK6Wi2sM0eMZLljUL5guwFZNM6GRlufb
+# FHPe6d7KqmXZuLH3j7T4Syy/mbdWAI3idfAp5fuHsVshAXYAvpj0cEmPKRGQ0Rfc
+# 7QORq6VvuO/3NLoiej5hZwTNmWt3byV+4f25PK6AvGpfBjEy1t8J4RWZdrchS0kj
+# btXnsoZ/WC3/PiOQ/Byj1OMnoy+AaNbSh2BA2VYYOxeBmIAOgMQ7oSDQf3OFMug8
+# alyzFsCzVmmhtZnl07Spmt7xxvyNcY1axJBWMbMNPpNpS3q4fEdmU9cP5LEnY/HN
+# x8wlwjvOhhCKMEi9hWH3gwxw6YseZGIXH4OZMRfClFq2ROX0OJropXUXEEqMz5jG
+# EzohMRPC7kq2dzLvZu0aAFRGo9WEG1pJjg1+cZfEi4wCuP1TryDTJWbOETmrZRvR
+# AaJ/wF2YNgzhxk4VPxOsY9L4xVjkHUNZOi+lff+bxyYBgFnmxiDWhgR++qBIMCNR
+# WvVnz3oE0CVbUvKLftQCrh0PcSm0sGxw9cfnjwb1W+DkuJDHSSSYW2M3PsishPW3
+# ASHQwDIl7SK02NrK0fG9bKorxGOAxRNFjduX+0QJty0uI+G58okB5dDXRb2oGngX
+# lPLqD+Eq4e4dlVdYTg==
 # SIG # End signature block

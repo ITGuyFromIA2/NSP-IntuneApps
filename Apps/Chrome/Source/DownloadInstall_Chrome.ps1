@@ -1,47 +1,47 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
-    }
-exit $lastexitcode
+﻿[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+#$Result = invoke-webrequest -uri "http://www.videolan.org/" -UseBasicParsing
+
+#$32Pattern = 'get.videolan.org/vlc/[0-9]+.[0-9]+.[0-9]+/win32/vlc-[0-9]+.[0-9]+.[0-9]+-win32.exe'
+#$64Pattern = 'get.videolan.org/vlc/[0-9]+.[0-9]+.[0-9]+/win64/vlc-[0-9]+.[0-9]+.[0-9]+-win64.exe'
+#href="//get.videolan.org/vlc/3.0.16/win32/vlc-3.0.16-win32.exe">Windows</a>                    
+#<a href="//get.videolan.org/vlc/3.0.16/win64/vlc-3.0.16-win64.exe">Windows 64bit<
+
+if ([Environment]::Is64BitOperatingSystem) {
+    $URL = "http://dl.google.com/edgedl/chrome/install/GoogleChromeStandaloneEnterprise64.msi"
+} else {
+    $URL = "http://dl.google.com/edgedl/chrome/install/GoogleChromeStandaloneEnterprise.msi"
 }
 
 
-write-host "Main script body"
+$DestFolder = 'C:\admin\Installers'
+$DestEXE = 'ChromeInstaller.msi'
+$FullDest = (-join($DestFolder,"\",$DestEXE))
 
-#############################################################################
-#End
-#############################################################################
+if (!(Test-Path -Path $DestFolder)) {New-Item -ItemType Directory -Path $DestFolder}
 
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
+if (Test-Path -Path $FullDest) {Remove-Item -Path $FullDest -Confirm:$false -force}
 
-foreach ($a in $App) {
 
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
 
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
+#$DownloadLink = Invoke-WebRequest -Uri $URL -UseBasicParsing
+#$URL = ($DownloadLink.Links -match "Click Here").href
 
-}
+Invoke-WebRequest -Uri $URL -OutFile $FullDest -UseBasicParsing -ErrorAction SilentlyContinue
+
+Unblock-File -Path $FullDest
+
+#start-process -filepath "$FullDest" -ArgumentList "/L=1033 /S" -wait
+
+
+msiexec /q /i "$FullDest"
+
+start-sleep -Seconds 120
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUK7VsBLMhvGaORTB5K9R9p35s
+# bUqgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +163,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUVtnn3xr4bCobDNXjvcreEuqsKewwDQYJKoZIhvcN
+# AQEBBQAEggEABKslcQ/5oRkDwQMmNuJF2GwJ5vtOy+UOI1LdGuH3AzqV8f8SadUj
+# sT4vKYYe5wB0/wwTo9EJJfxBp0sadDpRM/k1ABSJknMe4EiN28x7RudfB5g/cBrK
+# wD36Csynvx7XWARV+5u1cNsDllPyOJB4k6g8wI1OtvT4LGWg4EotcxFiDl0CkZyw
+# 01Q/lOTPjlj6WFCA7mBTU+LmOjTOIaQhB683E8KSOhdfIkfuYZ4EjQt41IlVAm/c
+# iOLVgOGZzUXgUvmqrTJHAnl2Jvwh5ZxqibetSVJf6bsq5Hc/hqQbtrWdOtKxtzr4
+# LDs/iCE1UdyhBWGgQfElri4ZZrp1KoT1zKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MDZaMC8GCSqGSIb3DQEJBDEiBCCv4bW/3vShYv9LAoQTblSqOQR063p3
+# GnatH3ZADfZ4tDANBgkqhkiG9w0BAQEFAASCAgAA8+1FRoT24/c+8ZO7qjYmcqQ5
+# GsXjz4rmZGoXCU1ozILoqkKxq80VNx3T6SyCP7uZ/m3vvxGHiqvHDGAY2/L+AION
+# r1FnZj9q1KWEThzdtzdv0MqxCwEOwKg0w03A2ZGjC/87MWg8+vuakR5nF0QaUw08
+# fgWa+PUkYxEN616ztIddoGk1aNB0pm8HDvjQ2yYEUj74AKjxy5ygfXz3Bd7VfTga
+# XdW+B57RS43C+Qib8JQOTzmKl0+3MQB3vcu8EgRxPRtRRx/VyfUZa/6ZhT0gdESz
+# w47aKlPzqvv+jFzBzL5YSnqQAoyvHCbL173Zt835Yao9VOwEL8adiMWyHD5MCqLM
+# rupJv/YqjH+IknvNrNBxDyq3gqzKLPLgWgfJcTNBrRaCodSVRBq5j7hC+H0wTj+U
+# 5aEemGAGKWb35YPSzaPEGP/oE181qr523Iaa/r2SmqgTq9ZWNsW+IDWcAQggSwOM
+# 7Ge6J1HcItcel4c6B+2k0vSiRs4bHgeXsUEhHL9on7Mp7srILfCDdkq4kIL5Vx6Z
+# s0GP7ccLWO9whu3gef9yegQ7Aajn7BykJn1aRB8DstJGI7N4pqxBt2mMzk5m7r23
+# WLgngW8Wi9WJyHDmSOy+3B/uIMSvrYhSLyJUcME11EANii5w4FWb7imkqOGIvkB8
+# oprXVz6c+QquJdIv3g==
 # SIG # End signature block

@@ -1,47 +1,85 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
-    }
-exit $lastexitcode
+﻿$ModTask = @{
+    Name = "PushLaunch"
+    Path = ""
+    BackupPath = "C:\Admin\Installers\ORIGINALTask - PushLaunch.xml"
+}
+
+$ModTask.Path = (Get-ScheduledTask -TaskName $ModTask.Name).taskpath
+
+if (!(test-path -Path $ModTask.backuppath)) {
+
+    #set-content -path $modTask.BackupPath -Value (Export-ScheduledTask -TaskName $ModTask.Name -TaskPath $ModTask.Path) -Force
+    $Original = [xml](Get-Content -Path $ModTask.BackupPath)
+
 }
 
 
-write-host "Main script body"
 
-#############################################################################
-#End
-#############################################################################
+Register-ScheduledTask -Xml $original.OuterXml -TaskName $($ModTask.Name) -TaskPath $($ModTask.Path) -Force
 
-$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
-$Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
+Remove-Item $ModTask.BackupPath -Force -ErrorAction SilentlyContinue
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
 
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
-
+$ScriptFile = @{
+FullDest = "C:\Admin\installers\ManualIntuneSync.ps1"
+Content = @"
+$Servname = "IntuneManagementExtension";
+Stop-Service -Name $Servname;
+Start-Service -Name $Servname;
+Write-EventLog -LogName Application -Source "Microsoft Intune Management Extension" -EventId 1337 -Message "Perform Manual Sync"
+"@
 }
+
+remove-item -Path $ScriptFile.fullDest -Force -ErrorAction SilentlyContinue
+
+
+$Shortcut_Full = "C:\users\Public\Desktop\Manual Sync Intune.lnk"
+Remove-Item -Path $Shortcut_Full -Force -ErrorAction SilentlyContinue
+
+#$Shortcut.IconLocation = 
+
+
+
+
+
+$FinalCheck = @{}
+$Finddd = @"
+EventID=1337]]
+"@
+$FinalCheck.Task = $true
+$FinalCheck.Shortcut = $true
+
+if ((Get-ScheduledTask -TaskName $ModTask.Name).triggers[-1].subscription.tostring() -match $Finddd) {
+    $FinalCheck.Task = $false
+} else {
+    $FinalCheck.Task = $true
+}
+if (Test-Path $Shortcut_Full) {
+    $FinalCheck.Shortcut = $false
+} else {
+    $FinalCheck.Shortcut = $true
+}
+
+if ($($FinalCheck.Task) -and $($FinalCheck.Shortcut)) {
+$Exit = 0
+Write-Output "Task and Shortcut Removed Properly"
+} elseif ($($FinalCheck.Task) -and !$($FinalCheck.Shortcut)) {
+$Exit = 1
+Write-Output "Shortcut NOT Removed Properly"
+} elseif (!$($FinalCheck.Task) -and $($FinalCheck.Shortcut)) {
+$Exit = 2
+Write-Output "Task NOT Removed Properly"
+} else {
+$Exit = 3
+Write-Output "BOTH Task and Shortcut NOT Removed Properly"
+}
+
+[environment]::ExitCode($Exit)
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUy2BQEDgsMcRz5IW8I1TcP4xv
+# F72gghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +201,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQU6DdnXhKvkaLR7NWTziR3Km6bpSIwDQYJKoZIhvcN
+# AQEBBQAEggEARx/PcY2ISsdnlx8QQuHtEDLN6P94CvYpvM4Dg9a0Ylhgy97MEso8
+# SlPkZjV2tvAd3uWUfj/rFwDZjvRe97F9PZfYNunXRoQ4xtSItMy2iI/3mBHqNjN2
+# sY6agMTStLYgrZPtJsmV98UO8T9Hhg8nKc6uAvRHpx8jeQaw6/pylunaIrJ3B2sJ
+# l913CuHngkVHM8ovDj1GvP68BcFKlxo6Me2MAc+sMXhUDZVs3duhlk21QksZ3+FS
+# k/nZRrxG1mjcxO+YJNzDWL9u87fqMtdYcSPvUkm4DRAcVLrl7zJAlcV9FvYCZ4PA
+# uDC6bO6HwTym4BDx4v00ppJgrjH7QT+oj6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTlaMC8GCSqGSIb3DQEJBDEiBCAqBFlxXsOOO9q2Frk+PBId4cJ6BWsf
+# JDDqu2/fC43g6zANBgkqhkiG9w0BAQEFAASCAgBkVNiQAzTczqmjqHkWC+w/Foc8
+# C1ca5tr41kCTNVxg7l0W4/KkUdQ5Zh0ghUzDzF50LjaoFnZ4qpAchrFYRzFpTZpD
+# z/Er4k/RK4xiOpc2PAYW4ywlTjppPMnYPZFx+le7SK4ZkgocnjlhsTRjLYU/CofQ
+# DOeGYwqfyNueTUgFV6Q2dNXI8r/xSuqo4hxpmjKmPSs7pOHmyEBOyV6mBmw9ehxx
+# hDMScwOpM7/YCCBciydWy92DOay760LW89c/61uaByN/osJsPCeomCpB2MWd3gQ+
+# MUFjmN5L3Yp8zhO4LhCoeto2R6ObXmPW9jQUBZA3EUAlgTNR0YxsyeFKp/kB1a9z
+# hmljtQ2obkLS7wBkID0fkXznkFbSx+c3FT4ElD2PW4vJuGf43rE7wDQK3ihlBZtS
+# OsbJivxUpbCO82+1ceqJyKibKOd+WAXTbEhxGRlDm6nPnp23c9UblQHG+R0b5sgV
+# JVF+rGQcIAs0z/bakmfgMCn8AEToIGFYON6cFYjnXWU7v3XExNBKGcEa1KfWiyfJ
+# uEPZUjBZqGXPfqJ0NTHc6CRfmBTJS9DT1+4l/vicfaCWjetLogoovnrV5Pe9eY5W
+# fmMonDVId7TpzA26cZpd/Zw2s3wanO4QwA1kTKTtkYohD8Xfv1atvEhaQWsXxNFf
+# sxx0o/6ThMXktKtkuA==
 # SIG # End signature block

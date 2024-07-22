@@ -19,29 +19,31 @@ write-host "Main script body"
 #End
 #############################################################################
 
+
+$AppSearch = "*Firefox*"
+
 $ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
 $Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
+$App = ($Programs | Where-Object { $_.DisplayName -like $AppSearch})
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
+#($App.DisplayName).count
 
-foreach ($a in $App) {
-
-	$Params = @(
-		"/qn"
-		"/norestart"
-		"/X"
-		"$a"
-	)
-
-	Start-Process "msiexec.exe" -ArgumentList $Params -Wait -NoNewWindow
-
+if (($App.DisplayName).count -gt 0) {
+    $Installed="$ApplicationName Installed"
+    write-output $installed
+     #[Environment]::Exit(0)
+} else {
+    $Installed="$ApplicationName NOT Installed"
+    write-output $Installed
+     #[Environment]::Exit(1)
 }
+
+cmd /c "$($App.UninstallString) /S"
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUi0azIhhozAm/UYki/MQviMXp
+# 1amgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +165,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUYfPtEJm2u9uJj0elF9ra5VWVurUwDQYJKoZIhvcN
+# AQEBBQAEggEABMCMC/HRk3YBxRt9ffsPRHRLJZBkkKghQ+R083rVhPH3nEXahomD
+# VKUkXFZ4wJVdjwRALQiyVz30+Zf/V5gaCdJDNZKMM/OP8yPwchnpU6xE1BkSNX1r
+# uBZdM+tKs7hwx95IbdXrz6XzvrrK9Hc2CS8AsXh/26vaBioT/MGWT0B5vcLDaQ4N
+# V+whngQ+6P9zhyo36W/2JMgiHfHfiZFG/LybTEJpJXQzWxlm5vFHTlpU1BV1JQuD
+# H1nFJ8gxw1vSDB7ycRup+MiZTNAC8o3613Yufpta0pIEpEyP/r5jDWe9rVq83Snr
+# y1xqZZbyU1uH2IS+ECYQBAUKWoICSRz/T6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTVaMC8GCSqGSIb3DQEJBDEiBCCVBQDcmmHef9v4qWkXt6hTgx+NrLiG
+# gAqBOSCnqzZBFzANBgkqhkiG9w0BAQEFAASCAgCBlZTocVHPbZWuVGKa3ESLGQxY
+# MOitByHrFWmIZoBqSPgn7kGW9cxkWYV67QDCkCvZ61Gly/ffELKVW7lutafjLwW8
+# UITmIIU0SqERDcPnean95ZhMgZVf+4YxQfanplxjnL5vsS1Xg46OfV2qk+hFyqqX
+# pxQG5fTKRjS2FzImyH0U0u7A0gVeUa7dVNFbgiDhH+JeYUiodCE7WLmOCyWebBAN
+# JzlpDpk+zuoskKEcMdctEEDPSU0o82ZnL0bj/UI8EmagGX4qF0gnEl4ct18CeHA1
+# gBNhGAGU3FD0SlPpuiE+V85jt1+5bNzNCCWHuCit1htPJ4e46KDBymUrarN4ZKpr
+# oCJbeaDooHqbj7zhjXUq9rIAAscDZjtOnlDlfcXKy8LAyin104DMUYzQGGw7tkuH
+# XXjzaiV5Gcw3dOdKHmpKWgYIUt9mkf5gUYp+PnTq1xLRU+DMArC5WqvwGGjdrQl4
+# qimiMFzoiVpHLW7UUiuT0nRG5iICWmGPd8f28z7u3lOLRjdyNmQic3st5Qj5qxFr
+# m85CHggCx3qMaDqc9eS9fGE9Qx1GHi3Ex7lRIzD5kLjgHnLdu4G2cfNvO9pKhl3Z
+# b1XF1oRFBwjd6X/hJ9rbiFkzYBH9g0z2+d8YwoxPf/XJ9kUHE//ZiTRxDsNrQli0
+# oGzzSzvkzqoMP07+LQ==
 # SIG # End signature block

@@ -1,29 +1,11 @@
-﻿#############################################################################
-#If Powershell is running the 32-bit version on a 64-bit machine, we 
-#need to force powershell to run in 64-bit mode .
-#############################################################################
-if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-    write-warning "Y'arg Matey, we're off to 64-bit land....."
-    if ($myInvocation.Line) {
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile $myInvocation.Line
-    }else{
-        &"$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe" -NonInteractive -NoProfile -file "$($myInvocation.InvocationName)" $args
-    }
-exit $lastexitcode
-}
-
-
-write-host "Main script body"
-
-#############################################################################
-#End
-#############################################################################
+﻿$AppSearch = "*FortiClient*"
 
 $ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
 $Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
+$App = ($Programs | Where-Object { $_.DisplayName -like $AppSearch -and $_.UninstallString -like "*msiexec*" }).PSChildName
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
+#$Programs | Where-Object { $_.DisplayName -like $AppSearch -and $_.UninstallString -like "*msiexec*" } | Select-Object -Property *
+
 
 foreach ($a in $App) {
 
@@ -40,8 +22,8 @@ foreach ($a in $App) {
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVHhcRXcf4CcxPJxUSfSmGZEF
-# M8ugghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUOKJQHN8/eXOKoCHcoMEF7TXj
+# DXagghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -163,28 +145,28 @@ foreach ($a in $App) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUpM9mKkbI2CHPFjmbZPy5eiBI9tkwDQYJKoZIhvcN
-# AQEBBQAEggEAiqU8aoE2sJxTgvhf+0lFI3RXlLK6o3uOzmQDq5SeKC3Clh99+DP9
-# BiveFr3eOdPttMei0Jr5pJ2ja+uIhPir9hiVrAQgPu7nwgCCy6LW98hdNzXTsrvx
-# 14Jv8Ezmei2JNoR3CuEhOliq4mVyvBiQ1XhnDEqWISUuG+4kigWMlbGFta8zOhns
-# zCEQEJyRNJ34piSzgWrf5XVeUSqxgfTrcfwAd9g4+RGZl4ZK8Ux3KAlJ9QpdvvUz
-# RyjXitPYswMAWN2GZcXaoO14c17Uiycymx/W2+sL3heEn3LEaSIcJB/Tftx5FNWM
-# hHSKYR33bwyi0qqzGSVNyZ4CYez7t9LEl6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUm7azWFxSILwpiot6uzU6P85Td4UwDQYJKoZIhvcN
+# AQEBBQAEggEAoTpAc6GsY36tvOcagxfq4Z/OJmYP3ECU3QDwOL/Ci1PDCGYXHCDL
+# U7Wc09p3XChuMJmLl8MJ2lfK36ybGWq5+/Q7hmnOTuysI57XGv5uCfOYOHSRFMLK
+# dIS8GoXs0f+n65LpA/hmMGr/cr2iyGPeAxOAcPfdmRxYjQ9xwzKvK0shrblL0ibP
+# LQvieKInF801FpnAXXHQo3K7AqFtS4Qwr94D9SDchzvEcgDs2FdDGjKMfzO3l+6N
+# zzDQif3HFoRNv5sc6bqZtaY0tCJWyJ9M/F9fgP6jncVZW7xRDxVYJeZmBiqW+KJH
+# Mn/PXgYd+tlUKIvXqRkX3IvAccy6riRIUaGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MDgxNzM3NTFaMC8GCSqGSIb3DQEJBDEiBCCEpsxePkSC6TVIDnJ2godwHmop+KE0
-# hcgpupPbYoI8RjANBgkqhkiG9w0BAQEFAASCAgAp7vCvED9DMzrZZyOMKWMmI1D1
-# oXZ1KjMaGtxINBGgyK51kjF+2TZPAA0RFPZZRVZTN+cek3joOkIkKT3VJJEnqtJQ
-# 9MDrlWq+GIidyLH25dNGf9ygBU22rzMn7EABPUaiLCo1bTy5YqTKYvq0BK2ZHUfT
-# 6zV1/3dKKgCnLxmvJS40T6flejsjuumH1fl8eN4XorngYA8nQC2768IxvE7eeLxk
-# AflMdruiM5lN+c6cex0c8KgFpLMcTICp7PoujG3zaIWJvr4T0RAT3nA1Q7aLsbII
-# 0RycI0BlojYh39pu0XzvT0NHZv9mb2134SshQuOAot1Bl0bUCGwPm+5UlkRfpaKa
-# /aqSCs1saKV6Ff42j7Zm2SiFPMh5R6+reYvgWSK/cCc2QK093WgaR8yAxA8VehvB
-# qOQs3FNPkwbVKFi1wnU0EyrKzbgktYlScQTc8PA0q7F1fp5jHUsKjv/xI4ycyt4O
-# pfYNiuI048BN8n5tzhB3vo8Bc2UKy3u6cXn2iGBCo68McbfGXSFRjinBW9Ipnclj
-# lRkV+gMRQmqetuJoons4qrA7u9eoDyVKzc4+RjJBMn5FtlKV891Hq46+MyQzUW2r
-# FrGT/w06ZAuQT0/i0A+oyF3iMyxUWoFbOyeWEp6P7rraqUNO6Zy+AO7Z0jYBI18h
-# 3WDK86JM9i4L3B0m3g==
+# MDkyMTE1MTZaMC8GCSqGSIb3DQEJBDEiBCBOHQTuLS615M0s8gFGVT63xoOImr5f
+# AEsPNcE6dfW4aDANBgkqhkiG9w0BAQEFAASCAgAPjpwX26WaWJCKu/6PdO+s8suQ
+# cdMmLD8ctgotQNZwVOjp220+pdbcTI4sTyfFuf0/VezI3Lfa90npe8gZ1nIkpU13
+# 09Uv3UnCP7WfZchQJFH1dWQemqdvTTks1z0mTEpUB4euR2j5QJYDEIoRyo6K9sQN
+# eCEX543dMxbfrGJuFXhGe8WkzgI2/M4G/0sLX1wfK//kzJyTGAeCU3ik30yjJbrt
+# +LtXVWe0yrsxfntGKXf0hjBLWQeHWnRbXVwwncqT5WjikrRp7mqm7LHw2CwrVqpD
+# 5C8McD3l0zODDispl5TY+NHK06j9YIiF3+amlWwwud5HX8ShN/7vcKXZ+spDbPxo
+# im+NyEcNEKfdTmcQLOB3RutA41cyrQxoLOfvRxNKTrAaFiFCXGqApGOMnrwJCmS6
+# Vr5Jnea4PtkoyafwhwzIZPu3qPpG9z62CsEu3wU0UPPXmPxP4Yt3B8tW5Cnl/N2B
+# oFg3PzUbyueJZETdcWeAEiz5rBgmVrw6WR9fO4XCI7SVaPN68ebjEua3q8jjhbKI
+# LjsNTdQyOndHbYL8+Z9lw9W4asuxPwEgfcgcfR3byCOQDMEQ7ZYU+rn+qJyPrwB2
+# nYS3gY2lNAwqC+fI1ub4ztQXZbxVbWKpDKj7X90aCqq6gwRP7U/pAht0f/f7vZsT
+# x3+Pi/uzdQJSFCLciw==
 # SIG # End signature block
