@@ -12,7 +12,7 @@
 
 #Group names used for all Assignements
     $MasterSettings.Assign_DeviceGroup = "Group-MDM_Dynamic_AutoPilot_LTs";             #Assign to Device Group for auto-install
-    $MasterSettings.Available_PeopleGroup = "Group-MDM_Dynamic_ALLCONTOSO_Licnensed";    #Assign to People Group for manual installs / reinstalls
+    $MasterSettings.Available_PeopleGroup = "Group-MDM_Dynamic_AllLicensed_Users";    #Assign to People Group for manual installs / reinstalls
 
 #FILTER used to Find all (or filtered) 'SplitScriptSettings' PoSH files in subdirectories for processing and upload
     $MasterSettings.AppEntry_Filter = "*_SplitScriptSettings.ps1"

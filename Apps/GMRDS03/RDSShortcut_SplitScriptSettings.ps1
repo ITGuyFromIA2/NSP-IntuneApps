@@ -3,8 +3,10 @@
 #Begin App Variables
 $VariableConfig = @{}
 
-$VariableConfig.DisplayName = "Remote Desktop Shortcut"
-$VariableConfig.Description = ("Creates RDS Shortcut on Public Desktop to RDSFarm.contoso.local")
+$RDSName = "GMRDS03"
+
+$VariableConfig.DisplayName = "$($RDSName) - Remote Desktop Shortcut"
+$VariableConfig.Description = ("Creates RDS Shortcut on Public Desktop to $($RDSName).gm.nsp")
 $VariableConfig.Publisher = "Network Systems Plus, Inc."
 $VariableConfig.IsFeatured = $True
 
@@ -92,8 +94,8 @@ $VariableConfig.PoSH.Sign_SourceFilter = "*.ps1"
 $VariableConfig.SetupFile_Filter = "Download*.ps1"
 $VariableConfig.PoSH.UninstallFile_Filter = "Uninstall*.ps1"
 $VariableConfig.PoSH.Args = @{
-ServerName="RDSFarm.contoso.local"
-FullPath="C:\Users\Public\Desktop\CONTOSO RDS Farm.rdp"
+ServerName="$($RDSName).gm.nsp"
+FullPath="C:\Users\Public\Desktop\$($RDSName).rdp"
 }
 
 $TempDetect= get-content -Path $("$TempBase\Detect_RDSShortcut_Source.ps1")

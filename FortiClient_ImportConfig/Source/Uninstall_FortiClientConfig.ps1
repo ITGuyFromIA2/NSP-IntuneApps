@@ -1,1 +1,0 @@
-﻿reg import .\CONTOSO_VPN_Remove.reg
