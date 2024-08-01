@@ -4,9 +4,10 @@
 $VariableConfig = @{}
 
 $RDSName = "GMRDS01"
+$Domain = "gm.nsp"
 
 $VariableConfig.DisplayName = "$($RDSName) - Remote Desktop Shortcut"
-$VariableConfig.Description = ("Creates RDS Shortcut on Public Desktop to $($RDSName).gm.nsp")
+$VariableConfig.Description = ("Creates RDS Shortcut on Public Desktop to $($RDSName).$($Domain)")
 $VariableConfig.Publisher = "Network Systems Plus, Inc."
 $VariableConfig.IsFeatured = $True
 
@@ -94,11 +95,25 @@ $VariableConfig.PoSH.Sign_SourceFilter = "*.ps1"
 $VariableConfig.SetupFile_Filter = "Download*.ps1"
 $VariableConfig.PoSH.UninstallFile_Filter = "Uninstall*.ps1"
 $VariableConfig.PoSH.Args = @{
-ServerName="$($RDSName).gm.nsp"
+ServerName="$($RDSName).$($Domain)"
 FullPath="C:\Users\Public\Desktop\$($RDSName).rdp"
 }
 
-$TempDetect= get-content -Path $("$TempBase\Detect_RDSShortcut_Source.ps1")
+$TempDetect= @"
+`$ServerName = "{ReplaceMe_Server}"
+`$fullPath = "{ReplaceMe_FullPath}"
+
+if (Select-String -Path `$fullPath -Pattern "`$ServerName") {
+    `$Installed="$App Installed"
+    write-output `$installed
+     [Environment]::Exit(0)
+} else  {
+    `$Installed="$App NOT Installed"
+    write-output `$Installed
+     [Environment]::Exit(1)
+    }
+"@
+
 $TempDetect=($TempDetect.replace("{ReplaceMe_Server}","$($VariableConfig.PoSH.Args['ServerName'])")).Replace("{ReplaceMe_FullPath}","$($VariableConfig.PoSH.Args['FullPath'])")
 Set-Content -path $("$TempBase\Detect\Detect_RDSShortcut.ps1") -value $TempDetect -Force
 

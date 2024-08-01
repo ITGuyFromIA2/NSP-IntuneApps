@@ -1,0 +1,1 @@
+powershell.exe -executionpolicy bypass -file "%~dp0InteractiveFingerPrint.ps1" "Greenberg-ATLT"

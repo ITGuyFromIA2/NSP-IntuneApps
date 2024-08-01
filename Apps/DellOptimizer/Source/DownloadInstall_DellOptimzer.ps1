@@ -1,48 +1,23 @@
-﻿param ($ServiceName, $DelegateTo)
-start-transcript C:\Admin\Delegate.log
-
-$pattern = "$DelegateTo[\s]*start_stop[\s]*allow*"
-
-    if ($psISE) {$BaseDir = Split-Path -Path $psISE.CurrentFile.FullPath    #IF running in ISE, with line by line execution this will work
-    } else {$BaseDir = $PSScriptRoot} 
-
-#Copy SetACL from SourceFolder to permanent KNOWN folder
-$ACL_FullDest = "C:\Admin\installers\SetACL.exe"
-
-if ((Get-WmiObject -Class Win32_OperatingSystem -Property OSArchitecture).OSArchitecture -like "*64*") {
-
-    $ACL_FullSource = "SetACL_64.exe"
-
-} else {
-    $ACL_FullSource = "SetACL_32.exe"
-
-}
-
-copy-item -Path $ACL_FullSource -Destination $ACL_FullDest -Force -ErrorAction SilentlyContinue
-
-$on = "\\127.0.0.1\$($ServiceName)"
-$ACE = """n:.\$($DelegateTo);p:start_stop"""
-
-cmd /c """$ACL_FullDest"" -on ""$on"" -ot srv -actn ace -ace $ACE"
-
-$Test = cmd /c """$ACL_FullDest"" -on ""$on"" -ot srv -actn list" | select-string -Pattern $pattern
-
-if ($Test.Matches) {
-    $ExitCode = 0
-} else {
-    $ExitCode = 1
-}
-
-write-output "Begin Debug Output"
-$StrOut = "ACL_FullSource: ""$ACL_FullSource""`n`nACL_FullDest: ""$ACL_FullDest""`n`nACE: $ACE`n`nON: $on`n`nTest: $Test`n`nExitCode: $ExitCode"
-Write-Output $StrOut
-
-[Environment]::Exit($ExitCode)
+<#
+This is a bunch of junk
+asdf
+f
+das
+as
+fda
+das
+assdf
+asf
+assfd
+asf
+asfa
+s
+#>
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBXWCjm130qptVLPxnu5Jp1kv
-# IR2gghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUyteM1qkdYomqsI+XsgLBGN6h
+# TwigghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -164,28 +139,28 @@ Write-Output $StrOut
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQU8/937zBsLsLqPK5d8eJBnwPJbQ0wDQYJKoZIhvcN
-# AQEBBQAEggEAIQMlErQpXp4+eFTOM4A5FTkP89a7t7FBDDy2IvvTf8C90HL0ZwLn
-# c7KQiFSqDolacU/VkUL0D6iMhQtFYLAE3ZBrjuxYlCf3r7JJwG9QQlWAtrOJdI7O
-# fSDfckMBYAH7ITl0VOxUCvQCZRLANwX1RY3iLnFHFMGBGfhPVolRQHPiuGF+2pBf
-# 9Yd/Syl2kphynQiOGNR/U+B7+3oSAwBE+uU5xxDLAEYk2TSHyesDtNVq30/R00qP
-# neJO0olOGVAczVeFnZUB93qNRu6yKC2XylkRWJeaZB+LG2Wqi3h+Bo5Ot87E/HtG
-# f8m1eCk9+FGAY6wQzJSIdtQpJX814TYdyKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQU8+yUVRlNebcjnThxEFltba3xemEwDQYJKoZIhvcN
+# AQEBBQAEggEAPIiGaJJEMAyXNjCq0aTMUGz5TVaUmVO6N3EJMUjIOlr1qP6akWkv
+# MkgbYMpsAY5TtG+qm1Iir2doYfOqKo1Ty9e0nZGujBdvYjeb2Oor0AHPwTZfQeqM
+# kjlTQ6xxXFcww86YF3GKGhSrfdnAIYSjDcGMMFm3qhC/U79BIcu0ogPUhb4u1S0E
+# HvoNv34jJowyHutiVBTPEBiZkWyj503pVT0RBruWDfwmUWV4DG3p6SuIaTIebROR
+# 1XlPCsvF/HX8LYgyYxvRP/ZQ6y5A/fSyQOJ+TAckcfHOHnb/nrDXz01H7+M3hgbc
+# 2mFNvZ8q+lHB+xKR7RqUAAgTkvG9ilPmn6GCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MjIxODMyNTNaMC8GCSqGSIb3DQEJBDEiBCBi/LAYM4FSIt8kPS36idJYQSQRqWfo
-# m1ED39DM5xVHAjANBgkqhkiG9w0BAQEFAASCAgBA/6PrIuVXI02nKmQ1TFr0L/kN
-# 6z96bv1jZBsYUMm/xAXBsJ4zZLrTisQk/+aFpaDuJygtfttJasa3U2DAP3ViyR1+
-# yu6eMKFeWd8Ge4X+Kb7RKIk44lw5Up1zp1o69iDpb1TSKUTujif+hZCPexzXfRsx
-# fx9ymzmO7g5MKmWnLoVUN83MGdmQzvzMIj2MZFqIncrPYzKASsmj19FQeST1iOoa
-# yfHgffMxYnKCbF0yLzJ1Lkltln4clrq4nHVL0v83FuNqtTCUpdOEut/g1wlmAnL5
-# IX9dxBNCIoZmFYSq66OxTnRBsVeWlFP2teK+ompXqbYABoNyURlgI8y3dGKKy8J7
-# hWcEYEZM6iKXe71NZ32y3Gfqz+aJVTWzzypw8XTg+3cw46L0EQvJIWMLYOsES39x
-# BzLCM+zg3wC+Cw2n5ZP3DqjMmH3+I4KnxWf/J9SmgnVIigsuFYHN6vXjF0mWBPjR
-# F2IsI4jOFoxYJ7MHGVj4BLqsmlEhwd2y93zpQkcTf1iZuhHk97bUG86SJ8eIw8XS
-# O2vyW1i6LI+Hs4iuRhV0L86YsBPaXdGOq+sQO556tSBAngDnQ4cl7YMyo6eMxLQM
-# 3wEYov5bgXCHGTczPh4GuPVFsxNb8XXA27ZvaIN2A7nPcmhiIlfTQg2Ie9iXidKk
-# ZMnIpBHipr9m+p0tnA==
+# MzExNDQwMDBaMC8GCSqGSIb3DQEJBDEiBCCX5i8s8XTXZ58pl+jgTPqe1nUwhp3T
+# 9F+fWJSN8BHhzzANBgkqhkiG9w0BAQEFAASCAgB42nFmMebTUiLmjgClBsrWbmrg
+# Da/Yvn8WpInmPAXDobhqVybeFeOCOBkgsqHMXWWy1ajs287kcSNZLMvtWWI9sIsy
+# /50oN8Tb7j5tTdlBSmWYLP9NDwELnCrOa7EJ9PHlBqHzRc/rV2PMu5bZKpQYiRhS
+# tGaaozkAsQYgNgOltTuWvCiTchb5zEmPGF1c/EORoVGbB4dnEk6W8Ur/Qv9EvXNT
+# h3Y84Ma8ZX2jLhQNCFJWPmmWjP0OMvLnUxootgWRCGrxeSVllSKqdl9yDnp0wTiv
+# 3N4VRe/sxVWbTnAFMwePH1KBjTi5S7b9z4sBHzmsVFDlmHACbvC9r/WFxhSdBZFw
+# wlmZCpe4itjjWv5C45lYddIFX9tUNduBjPzETBNppdhJxpUQUy7ZdD4ZuQj1BVR+
+# Kb0vw/NCNsShsiZhVcD4m6+ieeIMlCeD5bBNbsvS8x/0OMojGKxdtP9RCD9/HmyV
+# 2JJlsyqv/E/RX7bFJOni54vDmZOW2spr2QkC3CtXXIf4hD46Ds7wgjCtb+Ket8Js
+# SqolXl5tHihbaUAbYu4W2RMKlzI+fH+LkedYHk/gdwWU6kSf24WhoYAtZjeZoePD
+# Nwtwe0HSRwbIazVc/wYJS5uYHu7xXaAC0j20QeyZUSXOEixr9nFe1U4Tj1rtyY9s
+# yhQzXgaQGeVsvb8bYw==
 # SIG # End signature block

@@ -1,48 +1,75 @@
-﻿param ($ServiceName, $DelegateTo)
-start-transcript C:\Admin\Delegate.log
+﻿#
 
-$pattern = "$DelegateTo[\s]*start_stop[\s]*allow*"
+#Handling various AppX and AppXProvisioned items here
+    $List_AppXToRemove = @("*DellOptimizer*")
 
-    if ($psISE) {$BaseDir = Split-Path -Path $psISE.CurrentFile.FullPath    #IF running in ISE, with line by line execution this will work
-    } else {$BaseDir = $PSScriptRoot} 
+    #Get list of all provisioned apps
+        $AllAppX_Provisioned = Get-AppxProvisionedPackage -Online 
+        $Matched_Provisioned = @()
+#Loop through all provisioned, matching the 'List_AppXToRemove'
+    foreach ($Provisioned in $AllAppX_Provisioned) {
+        if (($List_AppXToRemove | %{$Provisioned.PackageName -like $_}) -contains $true) {
+            $Matched_Provisioned += $Provisioned
+            
+        }
+    }
 
-#Copy SetACL from SourceFolder to permanent KNOWN folder
-$ACL_FullDest = "C:\Admin\installers\SetACL.exe"
+$appX_Remove = @()
+$Matched_Installed = @()
 
-if ((Get-WmiObject -Class Win32_OperatingSystem -Property OSArchitecture).OSArchitecture -like "*64*") {
+$AllAppX_Installed = Get-AppxPackage -AllUsers
 
-    $ACL_FullSource = "SetACL_64.exe"
-
-} else {
-    $ACL_FullSource = "SetACL_32.exe"
-
+foreach ($Installed in $AllAppX_Installed) {
+    if (($List_AppXToRemove | %{$installed.PackageFullName -like $_}) -contains $true) {
+        $Matched_Installed += $Installed
+       
+    }
 }
 
-copy-item -Path $ACL_FullSource -Destination $ACL_FullDest -Force -ErrorAction SilentlyContinue
 
-$on = "\\127.0.0.1\$($ServiceName)"
-$ACE = """n:.\$($DelegateTo);p:start_stop"""
+$Timestamp = Get-Date -Format "yyyy-MM-dd_THHmmss"
+$LogFile = "$env:TEMP\DellUninst_$Timestamp.log"
+$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
+$Programs = Get-ItemProperty $ProgramList -EA 0
 
-cmd /c """$ACL_FullDest"" -on ""$on"" -ot srv -actn ace -ace $ACE"
+#List of applications to remove, as seen in Add/Remove Programs (use wildcards)
+    #$UninstallAppList = @("Dell Optimizer*","*Dell Digital Delivery*")
+    $UninstallAppList = @("Dell*Optimizer*","*Express*Connect*")
 
-$Test = cmd /c """$ACL_FullDest"" -on ""$on"" -ot srv -actn list" | select-string -Pattern $pattern
+#List of possible running procecsses associated with the above
+    $RunningProcessList = @("DellOptimizer.exe")
 
-if ($Test.Matches) {
-    $ExitCode = 0
-} else {
+$App = @()        #Will have 'MSI' apps in it
+ $App_Whole = @()
+$ManualApp = @()  #Will have 'other' types in it (Installshield)
+
+$Program = ($Programs | where-Object -Property Displayname -Like "*Dell*")[0]
+foreach ($Program in $Programs) {
+    if ((($UninstallAppList | %{($Program.DisplayName -like $_)}) -contains $true)) {
+        if (($Program.UninstallString -like "*msiexec*")) {
+        $App_Whole += $Program
+            $App += $Program.PSChildName
+            $App_Whole += $Program
+        } else {
+            $ManualApp += $Program
+        }
+    }
+}
+
+if (($Matched_Provisioned.count -eq 0) -and ($Matched_Installed.count -eq 0) -and ($ManualApp.count -eq 0) -and ($App.count -eq 0)) {
+Write-Output "NOT installed"
     $ExitCode = 1
+} else {
+    Write-Output "installed"
+    $ExitCode = 0
 }
-
-write-output "Begin Debug Output"
-$StrOut = "ACL_FullSource: ""$ACL_FullSource""`n`nACL_FullDest: ""$ACL_FullDest""`n`nACE: $ACE`n`nON: $on`n`nTest: $Test`n`nExitCode: $ExitCode"
-Write-Output $StrOut
-
-[Environment]::Exit($ExitCode)
+#Write-Output $ExitCode
+ [Environment]::Exit($ExitCode)
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBXWCjm130qptVLPxnu5Jp1kv
-# IR2gghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUr6vipJvyR0ee0xv9Zu9JLEH6
+# tbmgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -164,28 +191,28 @@ Write-Output $StrOut
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQU8/937zBsLsLqPK5d8eJBnwPJbQ0wDQYJKoZIhvcN
-# AQEBBQAEggEAIQMlErQpXp4+eFTOM4A5FTkP89a7t7FBDDy2IvvTf8C90HL0ZwLn
-# c7KQiFSqDolacU/VkUL0D6iMhQtFYLAE3ZBrjuxYlCf3r7JJwG9QQlWAtrOJdI7O
-# fSDfckMBYAH7ITl0VOxUCvQCZRLANwX1RY3iLnFHFMGBGfhPVolRQHPiuGF+2pBf
-# 9Yd/Syl2kphynQiOGNR/U+B7+3oSAwBE+uU5xxDLAEYk2TSHyesDtNVq30/R00qP
-# neJO0olOGVAczVeFnZUB93qNRu6yKC2XylkRWJeaZB+LG2Wqi3h+Bo5Ot87E/HtG
-# f8m1eCk9+FGAY6wQzJSIdtQpJX814TYdyKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUurQXNvtKW3L7fWW1ITSfPxLSSQ4wDQYJKoZIhvcN
+# AQEBBQAEggEAkdOSdPhrF2PHEs+cayMXDCifM4tIdH59clsPZJIEHc6y87mXNjLR
+# SCblFnacURYzslUoRfjO7MKMljgl2HwYGdJ7w1TOCRgnLueZtw7lvxvaNH2CEb9a
+# ZSnQvbqRDC9MACRD+c6Y/6XCQ3W1Q+MRqGMlJg4r6q7gOl5KgaImagbbUiS8Qx0c
+# fu1XQBYIXmSg3ff9S1ImeLD7xheI0NnRDN1Xfqv/a2uQb/BxBmDtYttH+fNXb1AB
+# WBYuF8lSqBRMFPijl8oWXFPNwZFs9cxDQOZhBmZL9WH86463v7ze4EAsS3n+MhSR
+# d+wv831Grxf25AGZV81XM6GY0VBA9yVfRaGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
 # aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
-# MjIxODMyNTNaMC8GCSqGSIb3DQEJBDEiBCBi/LAYM4FSIt8kPS36idJYQSQRqWfo
-# m1ED39DM5xVHAjANBgkqhkiG9w0BAQEFAASCAgBA/6PrIuVXI02nKmQ1TFr0L/kN
-# 6z96bv1jZBsYUMm/xAXBsJ4zZLrTisQk/+aFpaDuJygtfttJasa3U2DAP3ViyR1+
-# yu6eMKFeWd8Ge4X+Kb7RKIk44lw5Up1zp1o69iDpb1TSKUTujif+hZCPexzXfRsx
-# fx9ymzmO7g5MKmWnLoVUN83MGdmQzvzMIj2MZFqIncrPYzKASsmj19FQeST1iOoa
-# yfHgffMxYnKCbF0yLzJ1Lkltln4clrq4nHVL0v83FuNqtTCUpdOEut/g1wlmAnL5
-# IX9dxBNCIoZmFYSq66OxTnRBsVeWlFP2teK+ompXqbYABoNyURlgI8y3dGKKy8J7
-# hWcEYEZM6iKXe71NZ32y3Gfqz+aJVTWzzypw8XTg+3cw46L0EQvJIWMLYOsES39x
-# BzLCM+zg3wC+Cw2n5ZP3DqjMmH3+I4KnxWf/J9SmgnVIigsuFYHN6vXjF0mWBPjR
-# F2IsI4jOFoxYJ7MHGVj4BLqsmlEhwd2y93zpQkcTf1iZuhHk97bUG86SJ8eIw8XS
-# O2vyW1i6LI+Hs4iuRhV0L86YsBPaXdGOq+sQO556tSBAngDnQ4cl7YMyo6eMxLQM
-# 3wEYov5bgXCHGTczPh4GuPVFsxNb8XXA27ZvaIN2A7nPcmhiIlfTQg2Ie9iXidKk
-# ZMnIpBHipr9m+p0tnA==
+# MzExNDQwMDBaMC8GCSqGSIb3DQEJBDEiBCBHyK9mkXDl9zOTCHCxo836TFuIxjOH
+# xVz2CbOz1aInLzANBgkqhkiG9w0BAQEFAASCAgBBsJni0Zex/csTnKRdOCDbZltZ
+# vf6aLSpGnGoiBusyjtfUiPG8zeo3tLGIhjiRvaEH4zt1HLDhLDbS0n1btzCSVFlv
+# 3GT6AvhNhRqxNeBSmCSg+heNayTJTA3ZAgd3xtUdSC7KYoQsdPIifjD16XYXV22r
+# 3eBJck/riPc8EerlXvEr7G89jd01G2N2kfAvS6hce5OCOjwtWHXdI7TkMaO3osfd
+# /2jYkJzm4bODBJY47Q/x6hNV56u/SrQ4nJDaD+f0zFC6nl4jpjt6R3TgQgidnK/b
+# /vJNE74S23CeePJBXM4/+mO+ZJSEox64ymFw5+Bqrq2y0ckWDNOMZPg97aLxJARc
+# 2BNvoHrckcp7zjsMSjHi23qpiAb3ZDDYqFzF/mF2RQBDzsWC8/d51ulak9Psyi0m
+# +9N2UnxQUQtqsCaGelaJBuOGp6Rwu8MDHxdwvAfwVh1HPpLLtoBmV7Fu4QmSL7rk
+# I3JRq9S8KlO7+lVwZd2JZgaYI9v+AhA/2sJzDB6YDk9sDuN+jbjqNhiRwfCBISDH
+# OKtqUvdTcb8QhVDMD5pFQoZXTxmeEBIrW1zL3tzd5f5r5M7jfcrdZjPR+ihAePWU
+# fz5MbZnR7kBUxxPh2TzzsMaKJId87DHihLYzKrho+Fh/85IsJyAbGnpJDno9kv39
+# BnVUwHoZ49OI4HO1GA==
 # SIG # End signature block

@@ -1,9 +1,12 @@
-﻿#$TempBase = "C:\Users\chartiert\Network Systems Plus Inc\Customer Projects - Documents\CONTOSO\IntuneWindows\Applications\RemoteDesktop-Shortcut"
+﻿write-output $TempBase
+#$TempBase = "C:\Users\chartiert\Network Systems Plus Inc\Customer Projects - Documents\CONTOSO\IntuneWindows\Applications\RemoteDesktop-Shortcut"
+#if ($psISE) {$TempBase = Split-Path -Path $psISE.CurrentFile.FullPath    #IF running in ISE, with line by line execution this will work
+#} else {$TempBase = $PSScriptRoot} 
 
 #Begin App Variables
 $VariableConfig = @{}
 
-$RDSName = "GMRDS02"
+$RDSName = "GMRDS03"
 $Domain = "gm.nsp"
 
 $VariableConfig.DisplayName = "$($RDSName) - Remote Desktop Shortcut"
@@ -115,7 +118,7 @@ if (Select-String -Path `$fullPath -Pattern "`$ServerName") {
 "@
 
 $TempDetect=($TempDetect.replace("{ReplaceMe_Server}","$($VariableConfig.PoSH.Args['ServerName'])")).Replace("{ReplaceMe_FullPath}","$($VariableConfig.PoSH.Args['FullPath'])")
-Set-Content -path $("$TempBase\Detect\Detect_RDSShortcut.ps1") -value $TempDetect -Force
+Set-Content -path $("$($TempBase)\Detect\Detect_RDSShortcut.ps1") -value $TempDetect -Force
 
 $VariableConfig.PoSH.Args_String = [string]::Join(" -",($($VariableConfig.PoSH.Args).GetEnumerator() | %{$_.Name + " """ + $_.Value + """"})) | %{"-$_"}
 

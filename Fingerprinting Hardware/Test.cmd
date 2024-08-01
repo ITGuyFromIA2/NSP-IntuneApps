@@ -1,0 +1,1 @@
+powershell.exe -executionpolicy bypass -file "%~dp0TestMe.ps1" "Greenberg-ATLT"

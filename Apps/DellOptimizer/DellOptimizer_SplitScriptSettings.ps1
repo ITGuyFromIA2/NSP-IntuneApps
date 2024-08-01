@@ -1,16 +1,10 @@
-﻿#$TempBase = "C:\Users\chartiert\Network Systems Plus Inc\Customer Projects - Documents\CONTOSO\IntuneWindows\Applications\RemoteDesktop-Shortcut"
-
-#Begin App Variables
+﻿#Begin App Variables
 $VariableConfig = @{}
 
-$RDSName = "GMRDS03"
-
-$VariableConfig.DisplayName = "$($RDSName) - Remote Desktop Shortcut"
-$VariableConfig.Description = ("Creates RDS Shortcut on Public Desktop to $($RDSName).gm.nsp")
+$VariableConfig.DisplayName = "Dell Optimizer"
+$VariableConfig.Description = "This is meant to REMOVAL of Dell Optimizer. Does NOT have the capability to INSTALL"
 $VariableConfig.Publisher = "Network Systems Plus, Inc."
 $VariableConfig.IsFeatured = $True
-
-$VariableConfig.ImagePath
 
 #You can choose one or more of the categories. Not sure yet what happens if you choose none
 $VariableConfig.Category = @()
@@ -36,9 +30,9 @@ $VariableConfig.SetupType = "PoSH"
 
 #Can Be: 'allow' / 'basedOnReturnCode' / 'force' / 'suppress'
     #$VariableConfig.RestartExperience = 'allow'  
-    #$VariableConfig.RestartExperience = 'basedOnReturnCode'  
+    $VariableConfig.RestartExperience = 'basedOnReturnCode'  
     #$VariableConfig.RestartExperience = 'force'  
-    $VariableConfig.RestartExperience = 'suppress'  
+    #$VariableConfig.RestartExperience = 'suppress'  
 
 #Can Be: 'All' / 'x64' / 'x86'
     $VariableConfig.REQ_Architecture = "All"
@@ -70,7 +64,7 @@ $VariableConfig.AssignmentColl += [pscustomobject]@{
     GroupName_Exclude = @()     #Or Leave Empty
     GroupOIDs_Include = @()
     GroupOIDs_Exclude = @()
-    Intent = "required"         #Can Be: 'available' / 'required' / 'uninstall'
+    Intent = "uninstall"         #Can Be: 'available' / 'required' / 'uninstall'
     Nofication = "showall"      #Can Be: 'hideall' / 'showall' / 'showreboot'
     DeliveryOpt = "foreground"  #Can Be: 'foreground' / 'notConfigured'
 }
@@ -93,16 +87,6 @@ $VariableConfig.PoSH.Sign_SourceFilter = "*.ps1"
 
 $VariableConfig.SetupFile_Filter = "Download*.ps1"
 $VariableConfig.PoSH.UninstallFile_Filter = "Uninstall*.ps1"
-$VariableConfig.PoSH.Args = @{
-ServerName="$($RDSName).gm.nsp"
-FullPath="C:\Users\Public\Desktop\$($RDSName).rdp"
-}
-
-$TempDetect= get-content -Path $("$TempBase\Detect_RDSShortcut_Source.ps1")
-$TempDetect=($TempDetect.replace("{ReplaceMe_Server}","$($VariableConfig.PoSH.Args['ServerName'])")).Replace("{ReplaceMe_FullPath}","$($VariableConfig.PoSH.Args['FullPath'])")
-Set-Content -path $("$TempBase\Detect\Detect_RDSShortcut.ps1") -value $TempDetect -Force
-
-$VariableConfig.PoSH.Args_String = [string]::Join(" -",($($VariableConfig.PoSH.Args).GetEnumerator() | %{$_.Name + " """ + $_.Value + """"})) | %{"-$_"}
 
 $VariableCOnfig.EnforceSignature_Detection = $True
 $VariableConfig.RunAs32Bit_Detection = $False

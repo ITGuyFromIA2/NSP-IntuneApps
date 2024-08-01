@@ -15,8 +15,8 @@
     $MasterSettings.Available_PeopleGroup = "Group-MDM_Dynamic_AllLicensed_Users";    #Assign to People Group for manual installs / reinstalls
 
 #FILTER used to Find all (or filtered) 'SplitScriptSettings' PoSH files in subdirectories for processing and upload
-    $MasterSettings.AppEntry_Filter = "*_SplitScriptSettings.ps1"
-    #$MasterSettings.AppEntry_Filter = "ManualIntuneSync_SplitScriptSettings.ps1"
+    #$MasterSettings.AppEntry_Filter = "*_SplitScriptSettings.ps1"
+    $MasterSettings.AppEntry_Filter = "DellOptimizer_SplitScriptSettings.ps1"
 
 #Find all (or filtered) 'SplitScriptSettings' PoSH files in subdirectories for processing and upload
     $MasterSettings.AppsToProcess = @(Get-ChildItem -Path "$($MasterSettings.dir)" -Recurse -Filter $($MasterSettings.AppEntry_Filter) -Exclude "ApplicationTemplate")
