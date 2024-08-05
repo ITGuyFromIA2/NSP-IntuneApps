@@ -23,7 +23,7 @@ $VariableConfig.SetupType = "PoSH"
 #MAYBE make a change, and if empty then assume same as SetupType
     #$VariableConfig.Setup_installSyle = ""
     #$VariableConfig.Setup_uninstallSyle = ""
-    
+    $($VariableConfig.PoSH.Args)
 #Can Be: 'system' / 'user'
     $VariableConfig.InstallExperience = 'system' 
     #$VariableConfig.InstallExperience = 'user' 
@@ -90,3 +90,12 @@ $VariableConfig.PoSH.UninstallFile_Filter = "Uninstall*.ps1"
 
 $VariableCOnfig.EnforceSignature_Detection = $True
 $VariableConfig.RunAs32Bit_Detection = $False
+
+
+<#
+$VariableConfig.PoSH.Args = @{
+ServiceName="IntuneManagementExtension"
+DelegateTo="Power Users"
+}
+$VariableConfig.PoSH.Args_String = [string]::Join(" -",($($VariableConfig.PoSH.Args).GetEnumerator() | %{$_.Name + " """ + $_.Value + """"})) | %{"-$_"}
+#>
