@@ -1,10 +1,11 @@
-﻿param ($ServerName, $fullPath)
+﻿param ([string]$ServerName = "contoso-rds.contoso.nsp", [string]$fullPath = "C:\users\public\desktop\contoso-rds.rdp")
 
 $BaseString = "screen mode id:i:2`nuse multimon:i:0`ndesktopwidth:i:1920`ndesktopheight:i:1080`nsession bpp:i:32`nwinposstr:s:0,3,0,0,800,600`ncompression:i:1`nkeyboardhook:i:2`naudiocapturemode:i:0`nvideoplaybackmode:i:1`nconnection type:i:7`nnetworkautodetect:i:1`nbandwidthautodetect:i:1`ndisplayconnectionbar:i:1`nenableworkspacereconnect:i:0`ndisable wallpaper:i:0`nallow font smoothing:i:0`nallow desktop composition:i:0`ndisable full window drag:i:1`ndisable menu anims:i:1`ndisable themes:i:0`ndisable cursor setting:i:0`nbitmapcachepersistenable:i:1`nfull address:s:{0}`naudiomode:i:0`nredirectprinters:i:0`nredirectlocation:i:0`nredirectcomports:i:0`nredirectsmartcards:i:1`nredirectwebauthn:i:1`nredirectclipboard:i:1`nredirectposdevices:i:0`ndrivestoredirect:s:`nautoreconnection enabled:i:1`nauthentication level:i:0`nprompt for credentials:i:0`nnegotiate security layer:i:1`nremoteapplicationmode:i:0`nalternate shell:s:`nshell working directory:s:`ngatewayhostname:s:`ngatewayusagemethod:i:4`ngatewaycredentialssource:i:4`ngatewayprofileusagemethod:i:0`npromptcredentialonce:i:0`ngatewaybrokeringtype:i:0`nuse redirection server name:i:0`nrdgiskdcproxy:i:0`nkdcproxyname:s:`nenablerdsaadauth:i:0`n"
 
 $FinalURI = $BaseString -f $ServerName
+Set-Clipboard $FinalURI
 
-set-content -Path $fullPath -Value $FinalURI
+#set-content -Path $fullPath -Value $FinalURI
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
