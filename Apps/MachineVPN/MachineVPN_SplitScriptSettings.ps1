@@ -163,6 +163,7 @@ param (
     )
 "@
 
+<#
 $BaseScript = @"
     `$SplitDestPrefixes = @(`$DestPrefixes.Split(","))
 
@@ -182,7 +183,7 @@ if (`$UserTunnel) {
     `$EAPType = "MachineCertificate"
 
     `$MC_EKUFilter = @("1.3.6.1.5.5.7.3.2")
-    `$MC_IssuerFilter = Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object -FilterScript {`$_.Subject -like "*`$(`$CAFilter)*"}
+    `$MC_IssuerFilter = @(Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object -FilterScript {`$_.Subject -like "*`$(`$CAFilter)*"})[-1]
 }
 
 `$VPNServers = New-VpnServerAddress -ServerAddress `$VPNAddress -FriendlyName `$VPNAddress
@@ -360,27 +361,16 @@ if (`$notOK.Count -gt 0) {
 }
 [Environment]::Exit(`$ExitCode)
 "@
+#>
+
+$BaseScript = get-content -path "$($TempBase)\VPN_BaseScript.ps1"
+
+set-content -Path "$($TempBase)\Source\DownloadInstall_MachineVPN.ps1" -Value $($Params.install) -Force
+$BaseScript | add-content -Path "$($TempBase)\Source\DownloadInstall_MachineVPN.ps1"
 
 
+set-content -Path "$($TempBase)\Source\Uninstall_MachineVPN.ps1" -Value $($Params.uninstall) -Force
+$BaseScript | add-content -Path 
 
-$InstallFinal = @"
-$($Params.install)
-
-$($BaseScript)
-"@
-
-set-content -Path "$($TempBase)\Source\DownloadInstall_MachineVPN.ps1" -Value $InstallFinal -Force
-
-$UninstallFinal = @"
-$($Params.uninstall)
-
-$($BaseScript)
-"@
-set-content -Path "$($TempBase)\Source\Uninstall_MachineVPN.ps1" -Value $UninstallFinal -Force
-
-$DetectFinal = @"
-$($Params.detect)
-
-$($BaseScript)
-"@
-set-content -Path "$($TempBase)\Detect\Detect_MachineVPN.ps1" -Value $DetectFinal -Force
+set-content -Path "$($TempBase)\Detect\Detect_MachineVPN.ps1" -Value $($Params.detect) -Force
+$BaseScript | add-content -Path 

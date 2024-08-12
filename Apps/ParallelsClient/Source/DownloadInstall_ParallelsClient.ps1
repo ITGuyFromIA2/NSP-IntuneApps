@@ -1,216 +1,54 @@
-param (
-    [string]$CompanyName = 'HnR', 
-    [string]$VPNAddress = 'hnrconst.fortiddns.com', 
-    [string]$DNSSuffix = 'hnrco.com', 
-    [switch]$UserTunnel = $True, 
-    [string]$CAFilter = 'CN=hnrco-CA',
-    [string]$DestPrefixes = "192.168.1.15/32,192.168.1.16/32",
-    [switch]$DeviceTask = $False,
-    [switch]$DetectOnly = $True,
-    [switch]$Remove = $False
-    )
+﻿param([string]$Version="19")
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    $SplitDestPrefixes = @($DestPrefixes.Split(","))
 
-    $Status = @{}
+$BaseURL = "http://download.parallels.com/ras/v$($Version)/{0}"
 
-$NameBase = "$($CompanyName) VPN - {0} Tunnel"
-
-if ($UserTunnel -eq $True) {$NameSub = 'User'} else {$NameSub = 'Machine'}
-$Name = $($NameBase) -f $($NameSub)
-
-if ($UserTunnel) {
-    $EAP = New-EapConfiguration -Tls -UserCertificate
-    $EAPType = "Eap"
-
+if ([Environment]::Is64BitOperatingSystem) {
+    $Filename = "RASClient-x64.msi"
 } else {
-    $EAP = New-EapConfiguration -Tls
-    $EAPType = "MachineCertificate"
-
-    $MC_EKUFilter = @("1.3.6.1.5.5.7.3.2")
-    $MC_IssuerFilter = Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -like "*$($CAFilter)*"}
+    $Filename = "RASClient.msi"
 }
 
-$VPNServers = New-VpnServerAddress -ServerAddress $VPNAddress -FriendlyName $VPNAddress
+$FinalURL = $BaseURL -f $Filename
 
-$VPNParams = @{
-    ServerAddress = $VPNAddress
-    TunnelType = "Ikev2"
-    
-    Name = $Name
-    RememberCredential = $False
-    Force = $False
-    PassThru = $False
-    ServerList = $VPNServers
+$DestFolder = 'C:\admin\Installers'
+$DestEXE = $Filename
+$FullDest = (-join($DestFolder,"\",$DestEXE))
 
-    DNSSuffix  = $DNSSuffix
-    IdleDisconnectSeconds = 300
-    ThrottleLimit = 0
-    SplitTunneling = $true
-    AllUserConnection = $(if ($UserTunnel) {$false} else {$true})
-    AuthenticationMethod = $EAPType
-    EncryptionLevel = "Required"
-    UseWinlogonCredential = $false
-    EapConfigXmlStream = $(if ($UserTunnel) {$EAP.EapConfigXmlStream} else {})
-    MachineCertificateEKUFilter = $(if ($UserTunnel) {} else {$MC_EKUFilter})
-    MachineCertificateIssuerFilter = $(if ($UserTunnel) {} else {$MC_IssuerFilter})
-}
+if (!(Test-Path -Path $DestFolder)) {New-Item -ItemType Directory -Path $DestFolder}
 
-if (!($DetectOnly)) {
-    #Remove the VPN connection before adding
-    Remove-VpnConnection -Name $VPNParams.Name -AllUserConnection:$($VPNParams.AllUserConnection) -Force -ErrorAction SilentlyContinue
+if (Test-Path -Path $FullDest) {Remove-Item -Path $FullDest -Confirm:$false -force}
 
-    if (!($Remove)) {
-        $NewConn = Add-VpnConnection @VPNParams 
-    }
-} else {
-    #write-output "Skipping removal / creation due to 'Detect Only'"
-    $a = @(get-vpnconnection -name $VPNParams.Name -AllUserConnection:$($VPNParams.AllUserConnection) -ErrorAction SilentlyContinue)
-    if ($a.count -gt 0) {
-        $Status.VPN = $true
-    } else {
-        $Status.VPN = $false
-    }
-}
-$IPSecParams = @{
-    ConnectionName = $VPNParams.Name
-       AuthenticationTransformConstants = "SHA256128"
-       CipherTransformConstants = "AES256"
-       EncryptionMethod = "AES256"
-       IntegrityCheckMethod = "SHA256"
-       PfsGroup = "None"
-       DHGroup = "Group14"
-    }
-        
-if (!($DetectOnly)) {
-    #Set our IPSec Pararms
-    if (!($Remove)) {
-        Set-VpnConnectionIPsecConfiguration @IPSecParams -Force  | Out-Null
-    
+#$DownloadLink = Invoke-WebRequest -Uri $URL -UseBasicParsing
+#$URL = ($DownloadLink.Links -match "Click Here").href
 
-        #Add our Routes to each DestPrefix
-        foreach ($Dest in $SplitDestPrefixes) {
-            add-vpnconnectionroute -ConnectionName "$($VPNParams.Name)" -DestinationPrefix "$($Dest)" -PassThru  | Out-Null
-        }
-    }
+Invoke-WebRequest -Uri $FinalURL -OutFile $FullDest -UseBasicParsing -ErrorAction SilentlyContinue
 
-} else {
-    #Checking for our IPSec Config
-    if ($a.IPSecCustomPolicy.AuthenticationTransformConstants -ne $IPSecParams.AuthenticationTransformConstants) {
-        $Status.IPsec_AuthTransformOK = $false
-    } else {
-       $Status.IPsec_AuthTransformOK = $true
-    }
+Unblock-File -Path $FullDest
 
-    if ($a.IPSecCustomPolicy.CipherTransformConstants -ne $IPSecParams.CipherTransformConstants) {
-        $Status.IPsec_CipherTransformOK = $false
-    } else {
-       $Status.IPsec_CipherTransformOK = $true
-    }
+#start-process -filepath "$FullDest" -ArgumentList "/L=1033 /S" -wait
 
-    if ($a.IPSecCustomPolicy.DHGroup -ne $IPSecParams.DHGroup) {
-        $Status.IPsec_DHGroupOK = $false
-    } else {
-       $Status.IPsec_DHGroupOK = $true
-    }
+$RASConfig = @"
+<RootXML xmlns:dt="urn:schemas-microsoft-com:datatypes"><Alias dt:dt="string">H&amp;R Accubuild</Alias><Conn0000><Mode dt:dt="ui4">2</Mode><Server dt:dt="string">gateway.accubuild.com</Server><ServerPort dt:dt="ui4">443</ServerPort><tmpgw dt:dt="ui4">80</tmpgw><tmpssl dt:dt="ui4">443</tmpssl></Conn0000><Domain dt:dt="string"/><Password dt:dt="string"/><SSO dt:dt="ui4">0</SSO><SharedDeviceMode dt:dt="ui4">1</SharedDeviceMode><Theme dt:dt="string"/><UserName dt:dt="string"/></RootXML>
 
-    if ($a.IPSecCustomPolicy.IntegrityCheckMethod -ne $IPSecParams.IntegrityCheckMethod) {
-        $Status.IPsec_IntegrityCheckMethodOK = $false
-    } else {
-       $Status.IPsec_IntegrityCheckMethodOK = $true
-    }
+"@
 
-    if ($a.IPSecCustomPolicy.PfsGroup -ne $IPSecParams.PfsGroup) {
-        $Status.IPsec_PFSGroupOK = $false
-    } else {
-       $Status.IPsec_PFSGroupOK = $true
-    }
+$XMLFile = "$($DestFolder)\RASConfig.xml"
+set-content -path $XMLFile -Value $RASConfig -Force
 
-    if ($a.IPSecCustomPolicy.EncryptionMethod -ne $IPSecParams.EncryptionMethod) {
-        $Status.IPsec_EncryptionMethodOK = $false
-    } else {
-       $Status.IPsec_EncryptionMethodOK = $true
-    }
+$ExecuteMe = @"
+msiexec /qn /i "$FullDest" SHAREDDEVICE="1:import:$($XMLFile)"
+"@
 
+cmd /c "$($ExecuteMe)"
 
-    $Dests = $a.routes.DestinationPrefix | Sort-Object
-    $Unmatched = $false
-    foreach ($inputPrefix in $SplitDestPrefixes) {
-        $Matched = $false
-        foreach ($FoundDest in $Dests) {
-            if ($FoundDest -match $inputPrefix) {
-                $Matched = $true
-            }
-        
-        }
-
-        if (!($Matched)) {
-            $Unmatched = $true
-        }
-    
-    }
-
-    if (!($Matched)) {
-        
-        $Status.Routes = $false
-        } else {
-            $Status.Routes = $true
-        }
-}
-
-$TaskParams = @{
-        TaskName = "$($CompanyName) VPN - Connect Device Tunnel"
-        Trigger = New-ScheduledTaskTrigger -AtStartup
-        Action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c rasdial "{0}"' -f $VPNParams.Name)
-        Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -DontStopOnIdleEnd -WakeToRun
-        principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
-        }
-
-if (((!($UserTunnel)) -and ($DeviceTask)) -and (!$($DetectOnly))) {
-    
-    Unregister-ScheduledTask -TaskName $TaskParams.TaskName -ErrorAction SilentlyContinue -Confirm:$false | Out-Null
-    if (!($Remove)) {
-        Register-ScheduledTask @TaskParams | Out-Null
-    }
-} else {
-    $TaskOK = $false
-    if ($DeviceTask) {
-        $FoundTask = Get-ScheduledTask -TaskName "$($TaskParams.TaskName)" -ErrorAction SilentlyContinue
-        if ($FoundTask) {
-            if (($FoundTask.Principal.userid -eq $TaskParams.principal.userid) -and 
-                ($FoundTask.Principal.RunLevel -eq $TaskParams.principal.RunLevel)) {
-                        $Status.Task_Principal = $true
-                    } else {
-                        $Status.Task_Principal = $false
-                    }
-        
-        } else {
-            $TaskOK = $false
-        }
-    
-    }
-    #write-output "Skipping Task Creation due to DetectOnly"
-}
-
-
-
-
-
-$NotOK = @(($Status.GetEnumerator() | Where-Object -FilterScript {$_.Value -ne $true} | Sort-Object | Select-Object -Unique))
-if ($notOK.Count -gt 0) {
-    $ExitCode = 1
-    write-output "NOT Installed Properly"
-} else {
-    $ExitCode = 0
-    Write-Output "Installed Properly"
-}
-[Environment]::Exit($ExitCode)
-
+start-sleep -Seconds 120
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUlDvm/dZBy08HEKZoUYjQPW3z
-# 0yGgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUK7VsBLMhvGaORTB5K9R9p35s
+# bUqgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -332,28 +170,28 @@ if ($notOK.Count -gt 0) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUZ3u50mOfxurmxSS3hHjGwXf65NkwDQYJKoZIhvcN
-# AQEBBQAEggEADyhRBJ3qnk4BRFinu4wDK6MSgALtkdG97xdYZB/+WrsuYvwbBFHF
-# thDEKHXi/qYFe3wJ/+V5PMFF1f+S2UrRMTMXvGarY7F0XesM+COiA0z67DGX2666
-# 9qbR+aI+raA0i4y/mrVBjWB7x77WQ1krFyywbbcn3oamq6O+II/jysym/mK2MV9b
-# vKz7OIUrBQ/lABz84U3Y9/9wK9CPAEGfNzabt/3rPIQFkBpsFvjr55YuJtjKgXdq
-# EHJ9PlkeVd3C/WWz9/kA7/Z/rvnW2phEP+DpXUwozFY4V3cEroebTro51e7BDUJY
-# ZN2e8a0Uc9GnpA0nu9xr5wKJ+tCk0YRxPKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQUVtnn3xr4bCobDNXjvcreEuqsKewwDQYJKoZIhvcN
+# AQEBBQAEggEABKslcQ/5oRkDwQMmNuJF2GwJ5vtOy+UOI1LdGuH3AzqV8f8SadUj
+# sT4vKYYe5wB0/wwTo9EJJfxBp0sadDpRM/k1ABSJknMe4EiN28x7RudfB5g/cBrK
+# wD36Csynvx7XWARV+5u1cNsDllPyOJB4k6g8wI1OtvT4LGWg4EotcxFiDl0CkZyw
+# 01Q/lOTPjlj6WFCA7mBTU+LmOjTOIaQhB683E8KSOhdfIkfuYZ4EjQt41IlVAm/c
+# iOLVgOGZzUXgUvmqrTJHAnl2Jvwh5ZxqibetSVJf6bsq5Hc/hqQbtrWdOtKxtzr4
+# LDs/iCE1UdyhBWGgQfElri4ZZrp1KoT1zKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
-# aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA4
-# MDYxNTU1NDhaMC8GCSqGSIb3DQEJBDEiBCBZUykJUnAyE2zzUsagUjZeGcHBmeIB
-# jKJvjrGJyFAGiTANBgkqhkiG9w0BAQEFAASCAgCCwhO4KtE1B4TRhmWOedzcj5y3
-# IDtASfM7oGqrH2nfs5baHpaut2S0QG2wAZDpNuoQDD0ZnVcn1rzX/5lhAL1kWaWI
-# 63z0pPKmx5VgNJVVf7MTaMwIVE5XrR/JCp47zh7sPuxxf+Bmq1+rH23hOsilTtfU
-# eT++QbkpgUm2X+dv9ftidhMlu6pjpNLmpRGfhL6IY/zB+KOiDfD6G9J3mVDzIO7q
-# vc2ajkf4NON5kpY52XZOEGPAt3KJVUDHJ9Lvpb9aH7zeLbGl/7V6hflte/UPkggq
-# f7FZKBquRQcejARnAq8WJk0FUKEYnDahz5S5D+dXUFpHaj3NBLVBq1hmWGF3yJtx
-# r03WUyADyS6lYETzGUU0XKK7Jnnbcc0ef04Z2MulwviJYYt32+5c4eOkN88vW6Ez
-# 5CxsbMlYJR43sQAnhIM8IqkrW+WBAzk7POFgg/Mqico+Rox1hCkXfp69BK3CjvEe
-# i/feiulnXR4Y8Xpmu8pCP3l+cHWQWtYU4B6uZ6QOmFgpITH5gOJdUobyX4RiE6ej
-# paIa82iR+eSvmrnhWE7j/m37SQeyH8YZiCpVwPkH9TGvrBVSe0m+5tBI6TcM10zO
-# 80VOb0GvhKHI+wkCHLVcUrBy1zc2wDloTZQP3tn9Qj4fIqnrA+xWflUPQMis5WDF
-# eBPJxtNVCvYPd62cUQ==
+# aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
+# MDgxNzM3NTBaMC8GCSqGSIb3DQEJBDEiBCCv4bW/3vShYv9LAoQTblSqOQR063p3
+# GnatH3ZADfZ4tDANBgkqhkiG9w0BAQEFAASCAgBJYHMunGQHz6P+t/kmHdGofyLp
+# uIu2Up5gvVJcbqVbEOuU1+Dlh+EUe8Ja/vAAUr1XGvsD0mJpHAJbDqhMDBFvR4Y2
+# 7k2d9buC6C24sBRF05TYwCL1UNf8MNH1SInmmeKT4DE3FcL6sCmnPR5WjqA5N5Kr
+# gGyM0APFfOaeyTHGhxOOvQ46HFrqGe1TpK4leMpVCxKX8fMKykgmaS7c0jRkrptV
+# /SfKbk/UUMYJeGWRDiys3/KBkSRyivTzhzUdtH8960GB/WkQpTZ1n69M+WFr3rgC
+# wKyrg7AdRjC+U/zawR9FTrTUYAgQ444gyg1OF11bXAmxEfRQCtD4gDNHfBfjUN0W
+# FpMIqnVcyVKaRSZcODX79ax/9OU9cxUFoXP+HwpguP4dqXvVjWSlehMB47iZEcQA
+# OlmDm2sWrmctZS4BFWEd7is61Lz+WNhKjzPZzNGoOP8S0cnaUcUuNnqMrA+UChOe
+# qFabD12WwDh8Y/sE2DQ8NCMHAmtxmmYBTFkNDNNM0YvP7YBPduzf0jx4DJtPhTEs
+# qXifH/9WC2qciMhEXNm6PAlQyK1GN5Ty8O9Tjt1ktfr85nW1JFUwPtTNsZcnjOjc
+# pNZ4/sfHA3LwSJp0nCZvzlD0aV3AOqTESNQJ+gh4WcEknZOQKoyDZkWx6UtEyq7z
+# GoIJF/Z5S+d3GsvW0g==
 # SIG # End signature block

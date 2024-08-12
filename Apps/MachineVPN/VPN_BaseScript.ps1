@@ -1,14 +1,3 @@
-param (
-    [string]$CompanyName = '', 
-    [string]$VPNAddress = '', 
-    [string]$DNSSuffix = '', 
-    [switch]$UserTunnel = $, 
-    [string]$CAFilter = '',
-    [string]$DestPrefixes = "",
-    [switch]$DeviceTask = $,
-    [switch]$DetectOnly = $False,
-    [switch]$Remove = $False
-    )
 #This script NEEDS to have the parameters set first.
 <#
 #install

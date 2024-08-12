@@ -1,216 +1,23 @@
-param (
-    [string]$CompanyName = 'HnR', 
-    [string]$VPNAddress = 'hnrconst.fortiddns.com', 
-    [string]$DNSSuffix = 'hnrco.com', 
-    [switch]$UserTunnel = $True, 
-    [string]$CAFilter = 'CN=hnrco-CA',
-    [string]$DestPrefixes = "192.168.1.15/32,192.168.1.16/32",
-    [switch]$DeviceTask = $False,
-    [switch]$DetectOnly = $True,
-    [switch]$Remove = $False
-    )
+﻿$AppName = "Chrome"
 
-    $SplitDestPrefixes = @($DestPrefixes.Split(","))
+$ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
+$Programs = Get-ItemProperty $ProgramList -EA 0
+$App = @(($Programs | Where-Object { $_.DisplayName -like "*$AppName*"}))
 
-    $Status = @{}
-
-$NameBase = "$($CompanyName) VPN - {0} Tunnel"
-
-if ($UserTunnel -eq $True) {$NameSub = 'User'} else {$NameSub = 'Machine'}
-$Name = $($NameBase) -f $($NameSub)
-
-if ($UserTunnel) {
-    $EAP = New-EapConfiguration -Tls -UserCertificate
-    $EAPType = "Eap"
-
+if ($App.Count -gt 0) {
+    $Installed="$App Installed"
+    write-output $installed
+     [Environment]::Exit(0)
 } else {
-    $EAP = New-EapConfiguration -Tls
-    $EAPType = "MachineCertificate"
-
-    $MC_EKUFilter = @("1.3.6.1.5.5.7.3.2")
-    $MC_IssuerFilter = Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -like "*$($CAFilter)*"}
+    $Installed="$App NOT Installed"
+    write-output $Installed
+     [Environment]::Exit(1)
 }
-
-$VPNServers = New-VpnServerAddress -ServerAddress $VPNAddress -FriendlyName $VPNAddress
-
-$VPNParams = @{
-    ServerAddress = $VPNAddress
-    TunnelType = "Ikev2"
-    
-    Name = $Name
-    RememberCredential = $False
-    Force = $False
-    PassThru = $False
-    ServerList = $VPNServers
-
-    DNSSuffix  = $DNSSuffix
-    IdleDisconnectSeconds = 300
-    ThrottleLimit = 0
-    SplitTunneling = $true
-    AllUserConnection = $(if ($UserTunnel) {$false} else {$true})
-    AuthenticationMethod = $EAPType
-    EncryptionLevel = "Required"
-    UseWinlogonCredential = $false
-    EapConfigXmlStream = $(if ($UserTunnel) {$EAP.EapConfigXmlStream} else {})
-    MachineCertificateEKUFilter = $(if ($UserTunnel) {} else {$MC_EKUFilter})
-    MachineCertificateIssuerFilter = $(if ($UserTunnel) {} else {$MC_IssuerFilter})
-}
-
-if (!($DetectOnly)) {
-    #Remove the VPN connection before adding
-    Remove-VpnConnection -Name $VPNParams.Name -AllUserConnection:$($VPNParams.AllUserConnection) -Force -ErrorAction SilentlyContinue
-
-    if (!($Remove)) {
-        $NewConn = Add-VpnConnection @VPNParams 
-    }
-} else {
-    #write-output "Skipping removal / creation due to 'Detect Only'"
-    $a = @(get-vpnconnection -name $VPNParams.Name -AllUserConnection:$($VPNParams.AllUserConnection) -ErrorAction SilentlyContinue)
-    if ($a.count -gt 0) {
-        $Status.VPN = $true
-    } else {
-        $Status.VPN = $false
-    }
-}
-$IPSecParams = @{
-    ConnectionName = $VPNParams.Name
-       AuthenticationTransformConstants = "SHA256128"
-       CipherTransformConstants = "AES256"
-       EncryptionMethod = "AES256"
-       IntegrityCheckMethod = "SHA256"
-       PfsGroup = "None"
-       DHGroup = "Group14"
-    }
-        
-if (!($DetectOnly)) {
-    #Set our IPSec Pararms
-    if (!($Remove)) {
-        Set-VpnConnectionIPsecConfiguration @IPSecParams -Force  | Out-Null
-    
-
-        #Add our Routes to each DestPrefix
-        foreach ($Dest in $SplitDestPrefixes) {
-            add-vpnconnectionroute -ConnectionName "$($VPNParams.Name)" -DestinationPrefix "$($Dest)" -PassThru  | Out-Null
-        }
-    }
-
-} else {
-    #Checking for our IPSec Config
-    if ($a.IPSecCustomPolicy.AuthenticationTransformConstants -ne $IPSecParams.AuthenticationTransformConstants) {
-        $Status.IPsec_AuthTransformOK = $false
-    } else {
-       $Status.IPsec_AuthTransformOK = $true
-    }
-
-    if ($a.IPSecCustomPolicy.CipherTransformConstants -ne $IPSecParams.CipherTransformConstants) {
-        $Status.IPsec_CipherTransformOK = $false
-    } else {
-       $Status.IPsec_CipherTransformOK = $true
-    }
-
-    if ($a.IPSecCustomPolicy.DHGroup -ne $IPSecParams.DHGroup) {
-        $Status.IPsec_DHGroupOK = $false
-    } else {
-       $Status.IPsec_DHGroupOK = $true
-    }
-
-    if ($a.IPSecCustomPolicy.IntegrityCheckMethod -ne $IPSecParams.IntegrityCheckMethod) {
-        $Status.IPsec_IntegrityCheckMethodOK = $false
-    } else {
-       $Status.IPsec_IntegrityCheckMethodOK = $true
-    }
-
-    if ($a.IPSecCustomPolicy.PfsGroup -ne $IPSecParams.PfsGroup) {
-        $Status.IPsec_PFSGroupOK = $false
-    } else {
-       $Status.IPsec_PFSGroupOK = $true
-    }
-
-    if ($a.IPSecCustomPolicy.EncryptionMethod -ne $IPSecParams.EncryptionMethod) {
-        $Status.IPsec_EncryptionMethodOK = $false
-    } else {
-       $Status.IPsec_EncryptionMethodOK = $true
-    }
-
-
-    $Dests = $a.routes.DestinationPrefix | Sort-Object
-    $Unmatched = $false
-    foreach ($inputPrefix in $SplitDestPrefixes) {
-        $Matched = $false
-        foreach ($FoundDest in $Dests) {
-            if ($FoundDest -match $inputPrefix) {
-                $Matched = $true
-            }
-        
-        }
-
-        if (!($Matched)) {
-            $Unmatched = $true
-        }
-    
-    }
-
-    if (!($Matched)) {
-        
-        $Status.Routes = $false
-        } else {
-            $Status.Routes = $true
-        }
-}
-
-$TaskParams = @{
-        TaskName = "$($CompanyName) VPN - Connect Device Tunnel"
-        Trigger = New-ScheduledTaskTrigger -AtStartup
-        Action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c rasdial "{0}"' -f $VPNParams.Name)
-        Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -DontStopOnIdleEnd -WakeToRun
-        principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
-        }
-
-if (((!($UserTunnel)) -and ($DeviceTask)) -and (!$($DetectOnly))) {
-    
-    Unregister-ScheduledTask -TaskName $TaskParams.TaskName -ErrorAction SilentlyContinue -Confirm:$false | Out-Null
-    if (!($Remove)) {
-        Register-ScheduledTask @TaskParams | Out-Null
-    }
-} else {
-    $TaskOK = $false
-    if ($DeviceTask) {
-        $FoundTask = Get-ScheduledTask -TaskName "$($TaskParams.TaskName)" -ErrorAction SilentlyContinue
-        if ($FoundTask) {
-            if (($FoundTask.Principal.userid -eq $TaskParams.principal.userid) -and 
-                ($FoundTask.Principal.RunLevel -eq $TaskParams.principal.RunLevel)) {
-                        $Status.Task_Principal = $true
-                    } else {
-                        $Status.Task_Principal = $false
-                    }
-        
-        } else {
-            $TaskOK = $false
-        }
-    
-    }
-    #write-output "Skipping Task Creation due to DetectOnly"
-}
-
-
-
-
-
-$NotOK = @(($Status.GetEnumerator() | Where-Object -FilterScript {$_.Value -ne $true} | Sort-Object | Select-Object -Unique))
-if ($notOK.Count -gt 0) {
-    $ExitCode = 1
-    write-output "NOT Installed Properly"
-} else {
-    $ExitCode = 0
-    Write-Output "Installed Properly"
-}
-[Environment]::Exit($ExitCode)
-
 # SIG # Begin signature block
 # MIIbyQYJKoZIhvcNAQcCoIIbujCCG7YCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUlDvm/dZBy08HEKZoUYjQPW3z
-# 0yGgghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUNN3l/DALp3g1FSH9gbOx1WWH
+# brygghY1MIIDKDCCAhCgAwIBAgIQXp50wvfoo4ZEs021q1HySzANBgkqhkiG9w0B
 # AQsFADAlMSMwIQYDVQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLjAeFw0y
 # NDA2MDYxNzM0MTlaFw0yNTA2MDYxNzU0MTlaMCUxIzAhBgNVBAMMGk5ldHdvcmsg
 # U3lzdGVtcyBQbHVzLCBJbmMuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
@@ -332,28 +139,28 @@ if ($notOK.Count -gt 0) {
 # VQQDDBpOZXR3b3JrIFN5c3RlbXMgUGx1cywgSW5jLgIQXp50wvfoo4ZEs021q1Hy
 # SzAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUZ3u50mOfxurmxSS3hHjGwXf65NkwDQYJKoZIhvcN
-# AQEBBQAEggEADyhRBJ3qnk4BRFinu4wDK6MSgALtkdG97xdYZB/+WrsuYvwbBFHF
-# thDEKHXi/qYFe3wJ/+V5PMFF1f+S2UrRMTMXvGarY7F0XesM+COiA0z67DGX2666
-# 9qbR+aI+raA0i4y/mrVBjWB7x77WQ1krFyywbbcn3oamq6O+II/jysym/mK2MV9b
-# vKz7OIUrBQ/lABz84U3Y9/9wK9CPAEGfNzabt/3rPIQFkBpsFvjr55YuJtjKgXdq
-# EHJ9PlkeVd3C/WWz9/kA7/Z/rvnW2phEP+DpXUwozFY4V3cEroebTro51e7BDUJY
-# ZN2e8a0Uc9GnpA0nu9xr5wKJ+tCk0YRxPKGCAyAwggMcBgkqhkiG9w0BCQYxggMN
+# FTAjBgkqhkiG9w0BCQQxFgQU6ejWPVN4or6pnLYaQwnZ+n8hZaAwDQYJKoZIhvcN
+# AQEBBQAEggEAZXZY/vW3ujQbGO6hjpc/0ribHWw/yayMB2V08Ra7QBEUGT8hWQ8+
+# qiykESIw2DVjttQte8djuaPXHI3eV0rW+tJlkNhWuzn5FceuISYTRWvJyRM7LHNa
+# 4SIcCxIiyWA8+bJ0KuqizTBQLyfUdOPTj1qcrVjCbZAjScmJc2+tpXgqbMi2Y/N1
+# KRGSZqUZvvztjSrHljHslTEEurkoWTgYjTF7HcMWyoJR7QAqUGevWBoOQxGDhvoG
+# MBnYPc05EfBMs2lq3HwBsN0coWh7ZmAv2l4AGm6hkFIHfEMWLe8OBwxSZWn2iP3U
+# AEp6uJDcLt0z+/mdfllObM3lrHBKTPP4jqGCAyAwggMcBgkqhkiG9w0BCQYxggMN
 # MIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBU
 # aW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/lYRYwDQYJYIZIAWUDBAIBBQCg
-# aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA4
-# MDYxNTU1NDhaMC8GCSqGSIb3DQEJBDEiBCBZUykJUnAyE2zzUsagUjZeGcHBmeIB
-# jKJvjrGJyFAGiTANBgkqhkiG9w0BAQEFAASCAgCCwhO4KtE1B4TRhmWOedzcj5y3
-# IDtASfM7oGqrH2nfs5baHpaut2S0QG2wAZDpNuoQDD0ZnVcn1rzX/5lhAL1kWaWI
-# 63z0pPKmx5VgNJVVf7MTaMwIVE5XrR/JCp47zh7sPuxxf+Bmq1+rH23hOsilTtfU
-# eT++QbkpgUm2X+dv9ftidhMlu6pjpNLmpRGfhL6IY/zB+KOiDfD6G9J3mVDzIO7q
-# vc2ajkf4NON5kpY52XZOEGPAt3KJVUDHJ9Lvpb9aH7zeLbGl/7V6hflte/UPkggq
-# f7FZKBquRQcejARnAq8WJk0FUKEYnDahz5S5D+dXUFpHaj3NBLVBq1hmWGF3yJtx
-# r03WUyADyS6lYETzGUU0XKK7Jnnbcc0ef04Z2MulwviJYYt32+5c4eOkN88vW6Ez
-# 5CxsbMlYJR43sQAnhIM8IqkrW+WBAzk7POFgg/Mqico+Rox1hCkXfp69BK3CjvEe
-# i/feiulnXR4Y8Xpmu8pCP3l+cHWQWtYU4B6uZ6QOmFgpITH5gOJdUobyX4RiE6ej
-# paIa82iR+eSvmrnhWE7j/m37SQeyH8YZiCpVwPkH9TGvrBVSe0m+5tBI6TcM10zO
-# 80VOb0GvhKHI+wkCHLVcUrBy1zc2wDloTZQP3tn9Qj4fIqnrA+xWflUPQMis5WDF
-# eBPJxtNVCvYPd62cUQ==
+# aTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNDA3
+# MDgxNzM3NTBaMC8GCSqGSIb3DQEJBDEiBCBp6aMONUIyXSWx0J0FVvh4fUPx2uec
+# c7gnJ8WrieK0ujANBgkqhkiG9w0BAQEFAASCAgBi//qrnwSMHdolZz1fSx8ZZnZe
+# oJK8jFn6E/pS382zC1fxK24KLstp/dQvKGXLYiR0HHQTHeJvthH0++kFUgdxnd0s
+# 3NDlUxa1h2r2XCx4sb3K3x8OSzISNlRVrZwkbYPhZ8P9QMfCOb1xhRncKn94yfU2
+# prGAJpgg5yy5YJbnKrnQBNzlRxAnlrE05KEiLjqOaxk9oGNu8GtthrVcPoOEQPKV
+# ZfyxSn+XwRjxGAjz6nWSBfgIAG+03LbXY/S8DdkHDUBIamic7GQnfro793ucoWjt
+# ELRfLumpNEaYlXa8xXMUhrt1VUxNIkX2sJFC/TJNX69P2bcAVEB4RUMucZYf0GVW
+# ymrw8JgmO+IIoQwAbo3io5TfQD0yNldgXcdkG/N1WAcoWhD1UIegr3O76CoUFWmx
+# udBwu/T2tpj0BkNnGAmy0qd7O6ZmLA2SbmdfgrCLjE69gZOp2DQlcz75YS8/6ULJ
+# wRPhl4Ko0rKsmEf2vYhPjwXVkw5RSV7BnUKMrEvIylEUz+MuK6yhuLEThoq9k8ad
+# 1ymtFIR0NRC60o8uTJ5Bs0mg6nl3zKmFRrt6QCAdmFR6+2XZb1NpA6MtAjXvVAc0
+# dpr4zmMoGnVN2WCZPK2h77MtsQhEtU9EkGGyf4z8AZIXGKDcxijLulgPDE4QPYl+
+# rzSwH/wL+iAmfTv6pA==
 # SIG # End signature block

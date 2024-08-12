@@ -182,7 +182,7 @@ if (`$UserTunnel) {
     `$EAPType = "MachineCertificate"
 
     `$MC_EKUFilter = @("1.3.6.1.5.5.7.3.2")
-    `$MC_IssuerFilter = Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object -FilterScript {`$_.Subject -like "*`$(`$CAFilter)*"}
+    `$MC_IssuerFilter = @(Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object -FilterScript {`$_.Subject -like "*`$(`$CAFilter)*"})[-1]
 }
 
 `$VPNServers = New-VpnServerAddress -ServerAddress `$VPNAddress -FriendlyName `$VPNAddress

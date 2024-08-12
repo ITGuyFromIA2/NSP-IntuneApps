@@ -16,7 +16,7 @@
 
 #FILTER used to Find all (or filtered) 'SplitScriptSettings' PoSH files in subdirectories for processing and upload
     #$MasterSettings.AppEntry_Filter = "*_SplitScriptSettings.ps1"
-    $MasterSettings.AppEntry_Filter = "MachineVPN_SplitScriptSettings.ps1"
+    $MasterSettings.AppEntry_Filter = "UserVPN_SplitScriptSettings.ps1"
 
 #Find all (or filtered) 'SplitScriptSettings' PoSH files in subdirectories for processing and upload
     $MasterSettings.AppsToProcess = @(Get-ChildItem -Path "$($MasterSettings.dir)" -Recurse -Filter $($MasterSettings.AppEntry_Filter) -Exclude "Z-MiscSetup")
