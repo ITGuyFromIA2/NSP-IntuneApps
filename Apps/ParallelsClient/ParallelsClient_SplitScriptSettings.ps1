@@ -60,7 +60,7 @@ $VariableConfig.AssignmentColl = @()
         #>
 
 $VariableConfig.AssignmentColl += [pscustomobject]@{
-    GroupName_Include = @($($MasterSettings.Assign_DeviceGroup))
+    GroupName_Include = @("Group-MDM_Assigned_ParallelsClient")
     GroupName_Exclude = @()     #Or Leave Empty
     GroupOIDs_Include = @()
     GroupOIDs_Exclude = @()

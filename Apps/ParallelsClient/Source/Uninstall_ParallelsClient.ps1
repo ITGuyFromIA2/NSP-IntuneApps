@@ -21,9 +21,13 @@ write-host "Main script body"
 
 $ProgramList = @( "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" )
 $Programs = Get-ItemProperty $ProgramList -EA 0
-$App = ($Programs | Where-Object { $_.DisplayName -like "*Chrome*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
+$App = ($Programs | Where-Object { $_.DisplayName -like "*Parallels Client*" -and $_.UninstallString -like "*msiexec*" }).PSChildName
 
-Get-Process | Where-Object { $_.ProcessName -like "*Chrome*" } | Stop-Process -Force
+Get-Process | Where-Object { $_.ProcessName -like "*ParallelsClient*" } | Stop-Process -Force
+Get-Process | Where-Object { $_.Path -like "C:\Program Files\Parallels\*" } | Stop-Process -Force
+
+$Processes = get-process | Select-Object -Property *
+$Processes[0]
 
 foreach ($a in $App) {
 
