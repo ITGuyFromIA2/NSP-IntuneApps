@@ -1,0 +1,16 @@
+https://deanmalone.net/post/how-to-fork-your-own-repo-on-github/
+
+Create new repository for the fork(ed) one
+--https://github.com/new
+
+open Git Bash
+cd /c/GitRepo
+
+#This is the new repo
+git clone https://github.com/ITGuyFromIA2/IntuneApps-Greenbergs.git
+
+
+
+git remote add upstream https://github.com/ITGuyFromIA2/NSP-IntuneApps.git
+
+git pull upstream main
