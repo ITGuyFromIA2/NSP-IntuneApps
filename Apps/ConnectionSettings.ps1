@@ -1,13 +1,19 @@
 ﻿$codeCertificate = (Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Subject -eq 'CN="Network Systems Plus, Inc."'})[0]
 
+#Get the current working DIR
+    if ($psISE) {$CS_BaseDir = Split-Path -Path $psISE.CurrentFile.FullPath    #IF running in ISE, with line by line execution this will work
+    } else {$CS_BaseDir = $PSScriptRoot} 
+
 #DotSource our app and tenant info
-     $OUT_AppAuthInfo = "$(Split-Path $BaseDir -Parent)\Apps\GraphInfo.ps1"
+     $OUT_AppAuthInfo = "$($CS_BaseDir)\GraphInfo.ps1"
      . "$($OUT_AppAuthInfo)"
 <#
+    #This is meant to be DotSourced before the 'ConnectionSettings' script is ran
+    $TenantName = "sschousingagency.onmicrosoft.com"
+    $UsertoUse = 'nspadmin@caasiouxland.org'
+    $AppID = "3f43ac8c-4ceb-42ce-8165-eb36a6c46f1c"
+    $AppName = "Intune"
 
-$TenantName = "CONTOSO.onmicrosoft.com"
-$UsertoUse = 'nspadmin@CONTOSO.com'
-$AppID = "880ac12b-89d6-4ed6-80a7-9dd13dd3f8da"
 #>
 
 #Import-Module Microsoft.Graph.Intune

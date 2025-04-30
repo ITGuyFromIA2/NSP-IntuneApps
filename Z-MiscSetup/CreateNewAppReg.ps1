@@ -6,16 +6,15 @@
      $OUT_AppAuthInfo = "$(Split-Path $BaseDir -Parent)\Apps\GraphInfo.ps1"
      
 
-connect-azuread
+Connect-AzureAD
 
-#Permissions needed
-"$(Split-Path $BaseDir -Parent)\Apps\GraphInfo.ps1"
-$App = @{
-    Name = "Intune2"
-    RequiredResourceAccess = New-Object -TypeName "Microsoft.Open.AzureAD.Model.RequiredResourceAccess"
-    AppRedirectURI = $null
-    myapp = $null
-}
+    $App = @{
+        Name = "Intune"
+        RequiredResourceAccess = New-Object -TypeName "Microsoft.Open.AzureAD.Model.RequiredResourceAccess"
+        AppRedirectURI = $null
+        myapp = $null
+    }
+
 
     $DefList = @(
     @{Name="DeviceManagementApps.Read.All"; Type="Role"},
@@ -38,8 +37,13 @@ $app.RequiredResourceAccess.ResourceAccess = @(
 
 
 $App.AppRedirectURI = @("https://login.microsoftonline.com/common/oauth2/nativeclient","https://login.live.com/oauth20_desktop.srf","msal$($App.myapp.AppId)://auth","urn:ietf:wg:oauth:2.0:oob")
-Set-AzureADApplication -ObjectId $app.myapp.ObjectId -PublicClient $false -ReplyUrls $app.AppRedirectURI
+Set-AzureADApplication -ObjectId $app.myapp.ObjectId -PublicClient $false -ReplyUrls $app.AppRedirectURI 
 
+az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$($App.myapp.AppId)" --headers 'Content-Type=application/json' --body '{"isFallbackPublicClient": true}'
+
+
+Set-AzureADApplication -ObjectId $app.myapp.ObjectId -
+Set-AzureADApplication -ObjectId $app.myapp.ObjectId -PublicClient $true -ReplyUrls $app.AppRedirectURI -IdentifierUris @()
 $OutputStr = @"
 #This is meant to be DotSourced before the 'ConnectionSettings' script is ran
 `$TenantName = "$((Get-AzureADDomain | Where-Object -FilterScript {$_.Name -like "*.onmicrosoft.com"}).name)"
