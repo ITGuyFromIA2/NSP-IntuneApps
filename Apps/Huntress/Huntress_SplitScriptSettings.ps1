@@ -1,21 +1,24 @@
 ﻿#Begin App Variables
 $VariableConfig = @{}
 
-$VariableConfig.DisplayName = "Microsoft Office 365 Apps"
-$VariableConfig.Description = "Downloads and installs the latest version of $($VariableConfig.DisplayName) - Using Office Deployment Tool"
+$AcctKey = ''
+$CustKey = ''
+
+$VariableConfig.DisplayName = "Huntress - Endpoint Agent"
+$VariableConfig.Description = ("Downloads and installs the latest version of {0} using MSI Wrapper" -f $VariableConfig.DisplayName)
 $VariableConfig.Publisher = "Network Systems Plus, Inc."
 $VariableConfig.IsFeatured = $True
 
 #You can choose one or more of the categories. Not sure yet what happens if you choose none
 $VariableConfig.Category = @()
     #$VariableConfig.Category += "Books & Reference"
-    $VariableConfig.Category += "Business"
-    #$VariableConfig.Category += "Computer Management"
+    #$VariableConfig.Category += "Business"
+    $VariableConfig.Category += "Computer Management"
     #$VariableConfig.Category += "Collaboration & Social"
     #$VariableConfig.Category += "Data Management"
     #$VariableConfig.Category += "Development & Design"
     #$VariableConfig.Category += "Photos & Media"
-    $VariableConfig.Category += "Productivity"
+    #$VariableConfig.Category += "Productivity"
     #$VariableConfig.Category += "Other Apps"
 
 
@@ -30,13 +33,13 @@ $VariableConfig.SetupType = "PoSH"
 
 #Can Be: 'allow' / 'basedOnReturnCode' / 'force' / 'suppress'
     #$VariableConfig.RestartExperience = 'allow'  
-    $VariableConfig.RestartExperience = 'basedOnReturnCode'  
+    #$VariableConfig.RestartExperience = 'basedOnReturnCode'  
     #$VariableConfig.RestartExperience = 'force'  
-    #$VariableConfig.RestartExperience = 'suppress'  
+    $VariableConfig.RestartExperience = 'suppress'  
 
 #Can Be: 'All' / 'x64' / 'x86'
-    #$VariableConfig.REQ_Architecture = "All"
-    $VariableConfig.REQ_Architecture = "x64"
+    $VariableConfig.REQ_Architecture = "All"
+    #$VariableConfig.REQ_Architecture = "x64"
     #$VariableConfig.REQ_Architecture = "x86"
 
 #Can Be: 'w10_1607' / 'w10_1703' / 'w10_1709' / 'w10_2004' / 'w10_20H2' / 'w10_21H1' / 'w10_21H2' / 'w11_21H2' / 'w11_22H2' 
@@ -90,3 +93,12 @@ $VariableConfig.PoSH.UninstallFile_Filter = "Uninstall*.ps1"
 
 $VariableCOnfig.EnforceSignature_Detection = $True
 $VariableConfig.RunAs32Bit_Detection = $False
+
+
+
+$VariableConfig.PoSH.Args = @{
+AcctKey="$($AcctKey)"
+ClientName="$($CustKey)"
+LogDir="C:\Admin\Installers\Huntress\Logs"
+}
+$VariableConfig.PoSH.Args_String = [string]::Join(" -",($($VariableConfig.PoSH.Args).GetEnumerator() | %{$_.Name + " """ + $_.Value + """"})) | %{"-$_"}

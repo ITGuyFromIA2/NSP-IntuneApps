@@ -51,14 +51,15 @@ $signInAudience = "AzureADMyOrg"  # Change this to your desired audience: "Azure
 
 #Loop through each entry in BuiltPerms and add to ResourceAccess
 
-$BuiltPerms | Select-Object -Property @{name="Id"; expression={$_.PermissionID}}, @{name="Id"; expression={$_.Type}}
+#$BuiltPerms | Select-Object -Property @{name="Id"; expression={$_.PermissionID}}, @{name="Id"; expression={$_.Type}}
 
     $BuildAccess2 = (@{
         "ResourceAppId" = "00000003-0000-0000-c000-000000000000"
         "ResourceAccess" = @($BuiltPerms | Select-Object -property  @{Name="Id"; Expression={$($_.PermissionID)}}, @{Name="Type"; expression={$($_.Type)}})
     })
-    $BuiltPerms[0]
-    $BuildAccess -eq $BuildAccess2
+    #$BuiltPerms[0]
+    #$BuildAccess -eq $BuildAccess2
+    
 foreach ($Entry in $BuiltPerms) {
 $BuildAccess.ResourceAccess += @{
                                "Id"=  "$($Entry.PermissionID)"
@@ -66,14 +67,15 @@ $BuildAccess.ResourceAccess += @{
                            }
 
 }
+
 #This is the 'tester' / how to use it portion
 
-$BuildAccess2.ResourceAccess
+#$BuildAccess2.ResourceAccess
 
 
 
 # Step 5: Create the new application registration
-$newApp = New-MgApplication -DisplayName $appName -SignInAudience $signInAudience -RequiredResourceAccess $BuildAccess2 -IsFallbackPublicClient
+$newApp = New-MgApplication -DisplayName $appName -SignInAudience $signInAudience -RequiredResourceAccess $BuildAccess -IsFallbackPublicClient
 
 $AppRedirectURI = @("https://login.microsoftonline.com/common/oauth2/nativeclient",
                     "https://login.live.com/oauth20_desktop.srf",
