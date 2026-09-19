@@ -1,0 +1,4 @@
+{
+  "Classification": "RequiresRepair",
+  "Reason": "The embedded client connection was removed. The replacement can resolve and signature-validate the latest official MSI at endpoint install time, but its download-page resolver, shared-device XML, upgrade behavior, detection, and generator still require disposable-VM validation."
+}

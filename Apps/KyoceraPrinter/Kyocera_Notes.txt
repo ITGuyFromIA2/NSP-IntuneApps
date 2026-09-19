@@ -1,0 +1,4 @@
+Install
+	PowerShell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "DownloadInstall_Kyocera.ps1" -IPAddress "10.0.0.28" -PrinterName "Kyocera EcoSys M3540idn"
+Uninstall
+	PowerShell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "RemoveUninstall_Kyocera.ps1" -IPAddress "10.0.0.28" -PrinterName "Kyocera EcoSys M3540idn"

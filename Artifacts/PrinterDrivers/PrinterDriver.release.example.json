@@ -1,0 +1,11 @@
+{
+  "Repository": "your-private-org/NSP-IntuneApps",
+  "Tag": "printer-assets-v1",
+  "AssetName": "Vendor-Model-Driver.zip",
+  "Sha256": "REPLACE_WITH_64_CHARACTER_SHA256",
+  "Vendor": "Example Vendor",
+  "DriverVersion": "REPLACE_WITH_VENDOR_VERSION",
+  "SourceUrl": "https://example.invalid/vendor-driver-page",
+  "InfRelativePath": "Driver\\x64\\driver.inf",
+  "DriverName": "Exact Windows Printer Driver Name"
+}

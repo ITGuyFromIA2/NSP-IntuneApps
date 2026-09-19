@@ -1,0 +1,8 @@
+{
+  "Id": "ExampleShared",
+  "DisplayName": "Example Shared Drive",
+  "DriveLetter": "S",
+  "Path": "\\\\files.example.invalid\\Shared",
+  "Persistent": true,
+  "TaskName": "NSP Drive Map - Example Shared Drive"
+}

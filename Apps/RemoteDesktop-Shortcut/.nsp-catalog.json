@@ -1,0 +1,5 @@
+{
+  "Classification": "RetiredTemplate",
+  "Replacement": "New-NSPRdpApp",
+  "Reason": "This older app mutates detection source while loading its settings and contains hard-coded sample values. Use the RDP/RemoteApp wizard to generate a validated client-specific app instead."
+}

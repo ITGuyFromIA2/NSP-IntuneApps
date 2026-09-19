@@ -1,0 +1,21 @@
+
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+*.exe
+*.msi
+*.dll
+Apps/GraphInfo.ps1
+
+# Generated Intune packages are build output, never catalog source.
+*.intunewin
+
+# Local operator state and tenant-specific configuration.
+.nsp-intuneapps/
+Config/Local/
+Artifacts/PrinterDrivers/*.zip
+
+# Public code-signing artifacts may be versioned; private keys never are.
+!Z-MiscSetup/CodeSigning/NSPCodeSigning_*Expire_Public.cer

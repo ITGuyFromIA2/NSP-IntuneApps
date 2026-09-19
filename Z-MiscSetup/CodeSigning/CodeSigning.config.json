@@ -1,0 +1,22 @@
+{
+  "Policy": {
+    "Subject": "Network Systems Plus, Inc.",
+    "FriendlyName": "NSP Code Signing",
+    "DefaultValidityYears": 1,
+    "MinimumValidityYears": 1,
+    "MaximumValidityYears": 5,
+    "WarningDays": 90,
+    "CriticalDays": 30,
+    "TimestampServer": "http://timestamp.digicert.com"
+  },
+  "Current": {
+    "Token": "",
+    "Thumbprint": "",
+    "PfxFile": "",
+    "PublicCerFile": "",
+    "OmaUriFile": "",
+    "PasswordSecretName": "",
+    "NotBefore": "",
+    "NotAfter": ""
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "SchemaVersion": "2.0",
+  "Installer": {
+    "File": "DocumentAssemblySetup.exe",
+    "Sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "FileVersion": null,
+    "ProductVersion": null,
+    "SignerSubject": null,
+    "SignatureStatus": "Unknown"
+  },
+  "CapturedAtUtc": "2026-01-01T00:00:00.0000000Z",
+  "CaptureProcessId": 0,
+  "ExecutionEngine": "AutoIt",
+  "RuntimeParameters": [
+    { "Name": "LicenseKey", "Sensitive": true, "Description": "Retrieved at deployment time; never commit the value." },
+    { "Name": "WordProcessor", "Sensitive": false, "Description": "Reviewed product option presented by the installer." }
+  ],
+  "Steps": [
+    {
+      "Order": 1,
+      "Window": { "Title": "Document Assembly Setup", "Text": "License", "MatchMode": "Contains" },
+      "Control": { "Name": "License key", "AutomationId": "LicenseKey", "ControlType": "ControlType.Edit", "AutoItSelector": "" },
+      "Action": "SetValue",
+      "Value": { "Source": "RuntimeParameter", "Name": "LicenseKey" },
+      "TimeoutSeconds": 60,
+      "Optional": false,
+      "Note": "Supply the protected value from an approved runtime source."
+    },
+    {
+      "Order": 2,
+      "Window": { "Title": "Document Assembly Setup", "Text": "Word processor", "MatchMode": "Contains" },
+      "Control": { "Name": "Word processor", "AutomationId": "WordProcessor", "ControlType": "ControlType.ComboBox", "AutoItSelector": "" },
+      "Action": "Select",
+      "Value": { "Source": "RuntimeParameter", "Name": "WordProcessor" },
+      "TimeoutSeconds": 60,
+      "Optional": true,
+      "Note": "This screen may be absent in newer installer versions."
+    }
+  ]
+}

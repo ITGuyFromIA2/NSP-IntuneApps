@@ -1,0 +1,4 @@
+Install
+	PowerShell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "DownloadUnpack_KyoceraDrivers.ps1"
+Uninstall
+	PowerShell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "Remove_KyoceraDrivers.ps1"

@@ -1,0 +1,17 @@
+Windows Registry Editor Version 5.00
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels\REPLACE_WITH_VPN_NAME]
+"Description"=-
+"Server"=-
+"DATA1"=-
+"dual_stack"=-
+"sso_enabled"=-
+"use_external_browser"=-
+"azure_auto_login"=-
+"single_user_mode"=-
+"machine"=-
+"CertFilter"=-
+"ServerCert"=-
+"promptcertificate"=-
+"promptusername"=-
+

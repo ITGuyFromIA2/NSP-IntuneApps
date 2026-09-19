@@ -1,0 +1,9 @@
+{
+  "DisplayNamePatterns": [
+    "Dell*Optimizer*",
+    "*Express*Connect*"
+  ],
+  "AppxNamePatterns": [
+    "*DellOptimizer*"
+  ]
+}

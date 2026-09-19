@@ -1,0 +1,10 @@
+{
+  "PackageKind": "UnifiedBootstrapper",
+  "Architecture": "x64",
+  "PackagePath": "C:\\Staging\\AdobeAcrobatUnified.zip",
+  "InstallerRelativePath": "AdobeAcrobat\\Setup.exe",
+  "InstallArguments": [
+    "/sAll",
+    "/rs"
+  ]
+}

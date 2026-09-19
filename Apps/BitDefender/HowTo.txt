@@ -1,0 +1,12 @@
+Bitdefender GravityZone package configuration
+=============================================
+
+This upstream source intentionally contains no tenant package ID.
+
+Obtain the Windows Downloader package ID from the customer's GravityZone installation package. During package generation, inject it into the staged install command as the PackageId parameter. Do not edit or commit the upstream source with a real GZ_PACKAGE_ID value.
+
+The endpoint retrieves the current wrapper from Bitdefender over HTTPS and requires a valid Bitdefender Authenticode signature before execution. The vendor MSI is not committed to this public source repository.
+
+The dashboard/generator must refuse to build this app while the value is REPLACE_WITH_BITDEFENDER_PACKAGE_ID. The generated .intunewin package is deployment output and is excluded from Git.
+
+The package ID must be injected into both the staged install and uninstall commands. It belongs in generated tenant deployment output, never in this upstream source tree.

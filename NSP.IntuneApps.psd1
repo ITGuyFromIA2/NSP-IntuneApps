@@ -1,0 +1,50 @@
+@{
+    RootModule        = 'NSP.IntuneApps.psm1'
+    ModuleVersion     = '0.1.0'
+    GUID              = '67f2aa1c-495e-4f74-9c56-0de3c19dfc59'
+    Author            = 'Network Systems Plus, Inc.'
+    CompanyName       = 'Network Systems Plus, Inc.'
+    Copyright         = '(c) Network Systems Plus, Inc. All rights reserved.'
+    Description       = 'Catalog, validation, certificate, template, and dashboard tooling for NSP Intune Win32 applications.'
+    PowerShellVersion = '5.1'
+    FunctionsToExport = @(
+        'Export-NSPAppDeploymentRunReport'
+        'Get-NSPIntuneAppCatalog'
+        'Get-NSPIntuneAppInventory'
+        'Get-NSPAppSourceState'
+        'Get-NSPAppDeploymentPlanSummary'
+        'Get-NSPAppDeploymentPlanReview'
+        'Get-NSPAppDeploymentRunSummary'
+        'Test-NSPIntuneAppsPreflight'
+        'Start-NSPIntuneApps'
+        'New-NSPDriveMapApp'
+        'New-NSPAdobeApp'
+        'New-NSPManagedRebootsApp'
+        'New-NSPFortiClientVpnConfigApp'
+        'New-NSPRdpApp'
+        'New-NSPShortcutApp'
+        'New-NSPPrinterApp'
+        'Start-NSPInstallerCapture'
+        'Test-NSPInteractiveInstallerCapture'
+        'New-NSPAppDeploymentPlan'
+        'New-NSPAppDeploymentRun'
+        'Set-NSPAppDeploymentDecisions'
+        'Set-NSPAppDeploymentRunStage'
+        'Update-NSPAppDeploymentPlan'
+        'Resolve-NSPAppDeploymentAction'
+        'Get-NSPReleaseAsset'
+        'New-NSPCodeSigningCertificate'
+        'Get-NSPCodeSigningCertificate'
+        'Get-NSPCodeSigningTrustPlan'
+        'Publish-NSPCodeSigningTrust'
+    )
+    CmdletsToExport   = @()
+    VariablesToExport = @()
+    AliasesToExport   = @()
+    PrivateData       = @{
+        PSData = @{
+            Tags       = @('Intune', 'Win32App', 'MicrosoftGraph', 'NSP')
+            ProjectUri = 'https://github.com/ITGuyFromIA2/NSP-IntuneApps'
+        }
+    }
+}

@@ -1,0 +1,12 @@
+{
+  "DisplayName": "Example Remote Desktop",
+  "Mode": "Desktop",
+  "Host": "rds.example.invalid",
+  "Gateway": "",
+  "UseMultiMon": true,
+  "RedirectClipboard": true,
+  "RedirectPrinters": false,
+  "RedirectDrives": false,
+  "RedirectSmartCards": true,
+  "Destination": "PublicDesktop"
+}

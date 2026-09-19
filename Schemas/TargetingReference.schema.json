@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://netsysplus.example/schemas/intune-app-targeting-reference.schema.json",
+  "title": "NSP Intune application targeting reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [ "Intent", "Groups" ],
+  "properties": {
+    "Intent": {
+      "type": "string",
+      "enum": [ "required", "available", "uninstall" ]
+    },
+    "Groups": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "Include", "Exclude" ],
+      "properties": {
+        "Include": { "$ref": "#/$defs/directoryObjectReferences" },
+        "Exclude": { "$ref": "#/$defs/directoryObjectReferences" }
+      }
+    },
+    "Filter": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [ "Id", "Mode" ],
+          "properties": {
+            "Id": { "type": "string", "format": "uuid" },
+            "DisplayNameHint": { "type": "string" },
+            "Mode": { "type": "string", "enum": [ "include", "exclude" ] },
+            "BlueprintId": { "type": "string", "description": "Optional NSP-IntuneManager blueprint that owns this filter." }
+          }
+        }
+      ]
+    },
+    "EnrollmentProfileSelector": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "description": "A manager-owned request that resolves to a reusable assignment filter before app execution.",
+          "additionalProperties": false,
+          "required": [ "Platform", "ProfileIds" ],
+          "properties": {
+            "Platform": { "type": "string", "enum": [ "windows", "android", "ios" ] },
+            "ProfileIds": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+            "ProfileNameHints": { "type": "array", "items": { "type": "string" } },
+            "ResolutionPolicy": { "type": "string", "const": "requireUnique" }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "directoryObjectReferences": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [ "Id" ],
+        "properties": {
+          "Id": { "type": "string", "format": "uuid" },
+          "DisplayNameHint": { "type": "string" }
+        }
+      }
+    }
+  }
+}

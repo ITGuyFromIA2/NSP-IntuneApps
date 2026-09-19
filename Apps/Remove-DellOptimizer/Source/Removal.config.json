@@ -1,0 +1,13 @@
+{
+  "DisplayNamePatterns": [
+    "Dell*Optimizer*",
+    "*Express*Connect*"
+  ],
+  "AppxNamePatterns": [
+    "*DellOptimizer*"
+  ],
+  "ProcessNamePatterns": [
+    "DellOptimizer*"
+  ],
+  "FallbackUninstallArguments": "/silent"
+}

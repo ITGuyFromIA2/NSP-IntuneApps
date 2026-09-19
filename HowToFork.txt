@@ -1,0 +1,11 @@
+Create a new private repository for the downstream client catalog.
+
+Clone that new repository, then register NSP-IntuneApps as its upstream source:
+
+    git clone https://github.com/YOUR-PRIVATE-ORG/CLIENT-IntuneApps.git
+    cd CLIENT-IntuneApps
+    git remote add upstream https://github.com/ITGuyFromIA2/NSP-IntuneApps.git
+    git fetch upstream
+    git merge upstream/main
+
+Before transferring a downstream repository during offboarding, remove all NSP code-signing PFX/CER artifacts, local plan files, cached release assets, tenant identifiers, secrets, and credentials. Generated .intunewin files are build output and are not part of upstream source.

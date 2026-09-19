@@ -1,0 +1,13 @@
+{
+  "Repository": "ITGuyFromIA2/NSP-IntuneApps",
+  "Tag": "printer-drivers-v1",
+  "AssetName": "HP-Universal-PCL6-v61.240.01.24630.zip",
+  "Sha256": "46FD740CC1DE9A1D1E22288B598E887BCE2C9CE1927DC79706CB9E506FDE1D13",
+  "Vendor": "HP",
+  "DriverVersion": "61.240.01.24630",
+  "DriverDate": "2019-11-15",
+  "SourceUrl": null,
+  "SourceNotes": "Recovered from an existing private downstream driver package; verify vendor redistribution terms and source provenance before publishing the release asset.",
+  "InfRelativePath": "hpcu240u.inf",
+  "DriverName": "HP Universal Printing PCL 6"
+}

@@ -1,0 +1,4 @@
+Install
+	PowerShell.exe -ExecutionPolicy Bypass -noexit -File "C:\admin\DownloadInstall_HPUniversal.ps1" -IPAddress "10.0.0.24" -PrinterName "HP LaserJet Pro M148fdw"
+Uninstall
+	PowerShell.exe -ExecutionPolicy Bypass -noexit -File "C:\admin\RemoveUninstall_HPUniversal.ps1" -IPAddress "10.0.0.24" -PrinterName "HP LaserJet Pro M148fdw"

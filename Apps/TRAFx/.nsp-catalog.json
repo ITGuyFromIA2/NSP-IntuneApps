@@ -1,0 +1,4 @@
+{
+  "Classification": "RequiresRepair",
+  "Reason": "TRAFx is a distinct application, but this folder currently contains an incorrect FortiClient scaffold. Preserve the TRAFx catalog identity and replace the scaffold with a validated TRAFx Communicator package before deployment."
+}

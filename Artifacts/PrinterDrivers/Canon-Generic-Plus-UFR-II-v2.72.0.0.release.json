@@ -1,0 +1,13 @@
+{
+  "Repository": "ITGuyFromIA2/NSP-IntuneApps",
+  "Tag": "printer-drivers-v1",
+  "AssetName": "Canon-Generic-Plus-UFR-II-v2.72.0.0.zip",
+  "Sha256": "BAE6A12590930A999389D4B12E52FACE0CD3951B1FE80DED589890D4C30A9D62",
+  "Vendor": "Canon",
+  "DriverVersion": "2.72.0.0",
+  "DriverDate": "2022-07-19",
+  "SourceUrl": null,
+  "SourceNotes": "Recovered from an existing private downstream driver package; verify vendor redistribution terms and source provenance before publishing the release asset.",
+  "InfRelativePath": "CNLB0MA64.INF",
+  "DriverName": "Canon Generic Plus UFR II"
+}

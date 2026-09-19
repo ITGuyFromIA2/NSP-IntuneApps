@@ -1,0 +1,37 @@
+{
+  "SchemaVersion": "2.0",
+  "Installer": {
+    "File": "ExampleSetup.exe",
+    "Sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "FileVersion": "1.0.0.0",
+    "ProductVersion": "1.0.0",
+    "SignerSubject": "CN=Example Software Publisher",
+    "SignatureStatus": "Valid"
+  },
+  "CapturedAtUtc": "2026-01-01T00:00:00.0000000Z",
+  "CaptureProcessId": 0,
+  "ExecutionEngine": "AutoIt",
+  "RuntimeParameters": [],
+  "Steps": [
+    {
+      "Order": 1,
+      "Window": { "Title": "Example Setup", "Text": "Welcome", "MatchMode": "Contains" },
+      "Control": { "Name": "Next", "AutomationId": "NextButton", "ControlType": "ControlType.Button", "AutoItSelector": "" },
+      "Action": "Click",
+      "Value": null,
+      "TimeoutSeconds": 60,
+      "Optional": false,
+      "Note": "Advance from the welcome screen."
+    },
+    {
+      "Order": 2,
+      "Window": { "Title": "Example Setup", "Text": "Installation Complete", "MatchMode": "Contains" },
+      "Control": { "Name": "Finish", "AutomationId": "FinishButton", "ControlType": "ControlType.Button", "AutoItSelector": "" },
+      "Action": "WaitForWindow",
+      "Value": null,
+      "TimeoutSeconds": 600,
+      "Optional": false,
+      "Note": "Use a bounded completion wait instead of a fixed sleep."
+    }
+  ]
+}

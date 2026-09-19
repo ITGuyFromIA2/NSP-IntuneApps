@@ -1,0 +1,8 @@
+{
+  "DisplayNamePatterns": [
+    "LG Easy Guide*"
+  ],
+  "ProcessNamePatterns": [
+    "*LG*Easy*Guide*"
+  ]
+}

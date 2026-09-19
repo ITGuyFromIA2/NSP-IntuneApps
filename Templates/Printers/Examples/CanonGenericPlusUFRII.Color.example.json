@@ -1,0 +1,11 @@
+{
+  "Mode": "Queue",
+  "Name": "Example Main Office Color Printer",
+  "HostAddress": "192.0.2.25",
+  "PortName": "TCP_192.0.2.25",
+  "DriverName": "Canon Generic Plus UFR II",
+  "DriverAppName": "Canon Generic Plus UFR II Driver",
+  "Color": "Color",
+  "Duplex": "TwoSidedLongEdge",
+  "Note": "192.0.2.0/24 is TEST-NET-1 and is intentionally non-routable documentation data. Replace every tenant-local value through the printer wizard."
+}
