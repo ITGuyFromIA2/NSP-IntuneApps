@@ -77,3 +77,16 @@ Generate rather than commit machine-specific `.wsb` files:
 ```
 
 Offline is the default. Networked is an explicit choice for vendor resolution tests such as Parallels. Both map the repository read-only and expose only the ignored results directory as writable.
+
+## SetACL provenance audit
+
+DelegateService remains non-deployable until this audit is completed. It does not embed SetACL in source or in the Intune package.
+
+```powershell
+. .\Apps\DelegateService\Source\Get-NSPSetAcl.ps1
+$audit = Get-NSPSetAcl -AuditOnly
+$audit | Format-List Version, Uri, ArchiveLength, ArchiveSha256
+$audit.Executables | Format-Table Architecture, RelativePath, Length, Sha256, ProductVersion, SignatureStatus, SignerSubject -AutoSize
+```
+
+Record the complete output in the test evidence. Confirm that there is exactly one x86 and one x64 executable, both report the expected 3.1.2 product version, and the archive came from `helgeklein.com`. After review, replace `REPLACE_AFTER_VM_VALIDATION` in the helper with the uppercase archive SHA-256 and rerun the audit. Only then test DelegateService install, detection, and uninstall against a disposable service or the intended test service.

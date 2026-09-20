@@ -1,4 +1,4 @@
 {
   "Classification": "RequiresRepair",
-  "Reason": "The Gen1 package depended on copied SetACL executable payloads that are intentionally excluded from public source. Rebuild ACL handling with supported native APIs or a reviewed artifact manifest before deployment."
+  "Reason": "SetACL now comes directly from its publisher at install time, but deployment remains blocked until the disposable-VM audit records the official 3.1.2 archive hash and validates both executable variants."
 }
