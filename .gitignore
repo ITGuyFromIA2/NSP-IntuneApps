@@ -16,6 +16,7 @@ Apps/GraphInfo.ps1
 .nsp-intuneapps/
 Config/Local/
 Artifacts/PrinterDrivers/*.zip
+Apps/ParallelsClient/Source/ParallelsConnection.config.psd1
 
 # Public code-signing artifacts may be versioned; private keys never are.
 !Z-MiscSetup/CodeSigning/NSPCodeSigning_*Expire_Public.cer

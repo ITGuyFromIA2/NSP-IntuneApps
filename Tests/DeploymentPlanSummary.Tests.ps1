@@ -1,7 +1,9 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-Import-Module (Join-Path $repoRoot 'NSP.IntuneApps.psd1') -Force
-
 Describe 'Deployment plan summary' {
+    BeforeAll {
+        $repoRoot = Split-Path -Path $PSScriptRoot -Parent
+        Import-Module (Join-Path $repoRoot 'NSP.IntuneApps.psd1') -Force
+    }
+
     It 'summarizes review, execution, inventory, and attention state' {
         $planPath = Join-Path $TestDrive 'plan.json'
         [ordered]@{

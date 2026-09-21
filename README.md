@@ -4,6 +4,8 @@ Source catalog and operator workbench for building, signing, planning, and deplo
 
 The maintained implementation roadmap and decision log is [PLAN.md](PLAN.md).
 
+The current technical handoff, including uncommitted work and validation evidence, is [HANDOFF.md](HANDOFF.md).
+
 Disposable installer testing and VM handoff instructions are in [docs/TestVM.md](docs/TestVM.md).
 
 This repository is intentionally **public-safe source only**. Generated `.intunewin` packages, executable vendor payloads, and private-key artifacts are ignored and blocked by preflight. Large, non-downloadable payloads such as printer drivers belong in an approved private artifact repository and are represented here by pinned, SHA-256-verified manifests.

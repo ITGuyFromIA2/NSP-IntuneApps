@@ -1,6 +1,8 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-
 Describe 'Disposable test environment contract' {
+    BeforeAll {
+        $repoRoot = Split-Path -Path $PSScriptRoot -Parent
+    }
+
     It 'ships a VM runbook with clean checkpoint, Defender, Parallels, and interactive-installer checks' {
         $runbook = Get-Content -LiteralPath (Join-Path $repoRoot 'docs\TestVM.md') -Raw
         $runbook | Should -Match 'clean checkpoint'
@@ -11,8 +13,8 @@ Describe 'Disposable test environment contract' {
     }
 
     It 'keeps generated VM and Sandbox evidence out of source control' {
-        $ignore = Get-Content -LiteralPath (Join-Path $repoRoot '.gitignore') -Raw
-        $ignore | Should -Match '(?m)^Config/Local/$'
+        $ignore = Get-Content -LiteralPath (Join-Path $repoRoot '.gitignore')
+        $ignore | Should -Contain 'Config/Local/'
     }
 
     It 'generates an offline Sandbox configuration by default with a read-only repository mapping' {

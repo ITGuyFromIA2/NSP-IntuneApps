@@ -1,5 +1,3 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-
 Describe 'Printer generator' {
     BeforeAll {
         $repoRoot = Split-Path -Path $PSScriptRoot -Parent

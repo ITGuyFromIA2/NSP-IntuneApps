@@ -1,7 +1,6 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-
 Describe 'Parallels RAS Client repair contract' {
     BeforeAll {
+        $repoRoot = Split-Path -Path $PSScriptRoot -Parent
         $sourcePath = Join-Path $repoRoot 'Apps\ParallelsClient\Source\DownloadInstall_ParallelsClient.ps1'
         $configPath = Join-Path $repoRoot 'Apps\ParallelsClient\Source\ParallelsConnection.config.psd1.example'
         $source = Get-Content -LiteralPath $sourcePath -Raw
@@ -12,6 +11,9 @@ Describe 'Parallels RAS Client repair contract' {
         $config.SourceMode | Should -Be 'Latest'
         $config.DownloadPageUri | Should -Be 'https://www.parallels.com/products/ras/download/client/'
         $source | Should -Match 'Get-ParallelsLatestMsiUri'
+        $source | Should -Match 'https://download\.parallels\.com/website_links/'
+        $source | Should -Match 'Parallels Client \(Windows\) 64-bit Setup'
+        $source | Should -Match '\$normalizedVersion'
     }
 
     It 'supports validation and download without installation' {
@@ -21,7 +23,9 @@ Describe 'Parallels RAS Client repair contract' {
 
     It 'requires HTTPS, an MSI header, a valid signature, and an approved signer' {
         $source | Should -Match "Scheme -ne 'https'"
+        $source | Should -Match '\.download\{1\}'
         $source | Should -Match 'compound-file header'
+        $source | Should -Match "Status -ne 'UnknownError'"
         $source | Should -Match "Status -ne 'Valid'"
         $source | Should -Match 'ExpectedSignerPattern'
     }

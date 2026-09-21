@@ -1,5 +1,3 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-
 Describe 'Interactive installer capture contract' {
     BeforeAll {
         $repoRoot = Split-Path -Path $PSScriptRoot -Parent

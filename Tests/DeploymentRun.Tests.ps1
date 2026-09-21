@@ -1,7 +1,9 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-Import-Module (Join-Path $repoRoot 'NSP.IntuneApps.psd1') -Force
-
 Describe 'Resumable deployment run journal' {
+    BeforeAll {
+        $repoRoot = Split-Path -Path $PSScriptRoot -Parent
+        Import-Module (Join-Path $repoRoot 'NSP.IntuneApps.psd1') -Force
+    }
+
     BeforeEach {
         $planPath = Join-Path $TestDrive 'approved-plan.json'
         $runPath = Join-Path $TestDrive 'run.json'

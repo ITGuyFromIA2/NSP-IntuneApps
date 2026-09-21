@@ -9,7 +9,7 @@ The intended source policy is now explicit: **resolve the latest official x64 MS
 Before this app can become deployable:
 
 1. copy `ParallelsConnection.config.psd1.example` to `ParallelsConnection.config.psd1` in an ignored/generated app workspace and fill in the connection alias, gateway, and port;
-2. verify in the disposable VM that the official download-page resolver finds exactly one current x64 MSI and accepts its real signing certificate;
+2. rerun the validated official JSON-catalog resolver in the disposable VM and confirm that it still finds exactly one current x64 MSI with a valid Parallels signature (the 2026-09-19 download-only check passed for 21.2.27311);
 3. export a shared-device mode-1 connection from the current client and compare it with the minimal generated XML;
 4. replace the broad installed-program detection with a version-aware contract;
 5. expose these inputs through a guided generator and add Pester coverage;

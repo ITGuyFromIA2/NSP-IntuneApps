@@ -1,6 +1,6 @@
 # NSP-IntuneApps ongoing plan
 
-Last updated: 2026-09-19
+Last updated: 2026-09-21
 
 This is the durable roadmap and decision log for the upstream Intune application repository. Update it whenever a phase is completed, a design decision changes, a new blocker is discovered, or the next active work item changes.
 
@@ -63,39 +63,16 @@ Only this repository may be edited during this effort. Downstream repositories a
 - [x] Added preflight blockers for missing literal deployable identity and file-mutating deployable settings; generator-style prototypes cannot silently enter execution planning.
 - [x] Added a preflight blocker for likely committed passwords, passphrases, license keys, API keys, access tokens, client secrets, and credential-bearing `net use` commands. Reports identify only file/line/type and never print the suspected value.
 - [x] Removed a missed organization-specific Parallels RAS connection profile and legacy tenant/application identifiers from the Gen1 connection shim. Parallels is now `RequiresRepair` with fail-closed placeholders until a reviewed MSI/configuration generator replaces it; the marker regression list includes the newly discovered names.
-- [x] Installed Pester 6.2.0 for the current user and established a passing repository suite (282 tests at the current checkpoint), plus a successful Windows PowerShell 5.1 parser/module-import gate.
+- [x] Installed Pester 6.2.0 for the current user and established a passing repository suite (304 tests at the current checkpoint), plus a successful Windows PowerShell 5.1 parser/module-import gate.
 - [x] Documented the future `NSP-IntuneManager` boundary and targeting contract.
 - [x] Audited every fetched branch and all 46 historical `.intunewin` objects after discovering the repository was public. No PFX/private key, Forti credential, Parallels credential, or Graph secret was found. The apparent ScreenConnect `GuestCode` values were customer-label custom properties, not authentication or enrollment secrets.
 - [x] Removed the literal Bitdefender GravityZone package ID from install/uninstall source, made tenant injection fail closed, and added a preflight/Pester regression blocker for future literal `GZ_PACKAGE_ID` values.
 
 ## Current work
 
-### Active downstream-only app triage
+The first downstream-only app wave is implemented as sanitized generic apps and generators; its remaining external step is the reviewed private Canon/HP artifact release. Disposable-machine validation for Parallels, DelegateService/SetACL, and AutoIt is now complete (see Phase 3 and [docs/TestVM.md](docs/TestVM.md)); the next development work is the reviewed deployment executor in Phase 4, plus the Parallels guided configuration generator and the engine-neutral schema-v2 runner noted under Phase 3. The exact handoff state, test evidence, and uncommitted-file warning are in [HANDOFF.md](HANDOFF.md).
 
-Audit the agreed first wave before copying source:
-
-- Adobe Reader/Acrobat architecture and edition variants;
-- Dell Optimizer;
-- LG Easy Guide and LG MyGram removal apps;
-- Managed Reboots;
-- generic Canon and HP printer-driver manifests/examples;
-- VCred (completed).
-
-For every candidate:
-
-1. compare duplicate downstream copies and select a champion;
-2. inspect for client identifiers, credentials, internal paths, stale payloads, copied build output, and misleading names;
-3. correct unsafe or broken behavior while porting, rather than blindly copying;
-4. keep vendor binaries out of Git unless they are intentional small source assets;
-5. add parser/preflight/Pester coverage before marking the app deployable.
-
-### Current finding
-
-The LG candidates appear to contain copied Chrome download/install logic despite LG-specific names. They must be treated as suspect until their intended removal behavior is reconstructed; they should not be copied verbatim.
-
-The downstream Managed Reboots package is also not a copy candidate. Its reusable concepts are maximum-uptime enforcement, pending-reboot checks, user deferral, and scheduled evaluation. Its implementation downloads AnyBox from PSGallery on endpoints, redistributes a ServiceUI executable, writes to `C:\admin`, mutates generated source/detection files at package time, contains test-group assignments, and has task-status comparison defects. Rebuild it as a self-contained system evaluator plus interactive-user notification/enforcement design; do not promote the current files.
-
-Vendor helper binaries follow a procurement policy rather than being copied into source. Bitdefender's vendor-published wrapper is retrieved and Authenticode-validated on the endpoint. SetACL 3.1.2 is retrieved directly from its publisher because its redistribution terms require a license when bundled; normal DelegateService execution remains blocked until the disposable-VM audit pins the archive hash and confirms both executable variants. Historical ServiceUI copies are not replaced: Microsoft retired MDT in January 2026, Managed Reboots no longer needs ServiceUI, and any future legacy exception requires an explicit reviewed design. See `docs/VendorDependencyPolicy.md`.
+Vendor helper binaries follow a procurement policy rather than being copied into source. Bitdefender's vendor-published wrapper is retrieved and Authenticode-validated on the endpoint. SetACL 3.1.2 is retrieved directly from its publisher because its redistribution terms require a license when bundled; its publisher archive is SHA-256 pinned after confirming the signed x86 and x64 executable variants. DelegateService's install/detect/uninstall mechanism is functionally verified against a disposable local service and user (the SetACL grant/revoke round-tripped correctly via `sc start` access checks, not just a textual ACL listing); the real production detection target (`IntuneManagementExtension`) remains unverified since the test VM isn't Intune-enrolled. Historical ServiceUI copies are not replaced: Microsoft retired MDT in January 2026, Managed Reboots no longer needs ServiceUI, and any future legacy exception requires an explicit reviewed design. See `docs/VendorDependencyPolicy.md`.
 
 The replacement prompt bridge is based on the proven `NSP-FGTIPSecTools` SuperScript pattern: WTS-based active-user discovery, transient per-user interactive scheduled tasks, first-response-wins cleanup, and the domain-qualified `UserId` XML repair. It remains self-contained in generated endpoint packages. Possible future promotion into `NSP.Bootstrap` requires discussion before creating any endpoint runtime dependency.
 
@@ -113,7 +90,7 @@ The downstream Adobe variants required consolidation rather than direct copying.
 - [x] Add one sanitized Canon color queue and one sanitized HP monochrome queue example using non-routable documentation addresses.
 - [ ] Publish and retrieve the staged Canon/HP assets from the private Release after provenance/redistribution review.
   - Current environment note: GitHub CLI is not installed; preflight reports this as a release-only warning rather than blocking unrelated catalog work.
-- [x] Run catalog/client-marker/parser/Pester checks after each family. Current consolidated gate: 259 passing tests.
+- [x] Run catalog/client-marker/parser/Pester checks after each family. Current consolidated gate: 304 passing tests.
 
 ### Phase 2 — Generic client-pattern generators
 
@@ -135,8 +112,10 @@ The downstream Adobe variants required consolidation rather than direct copying.
 - [x] Sanitize and genericize the useful multi-screen and document-assembly patterns as schema-v2 examples.
 - [x] Add a non-interactive schema-v2 validator so future `NSP-IntuneManager` orchestration can reject broken or undeclared runtime-parameter references before execution.
 - [x] Add a disposable-VM/Sandbox runbook, clean-machine readiness snapshot, and local Defender comparison harness for interpreted versus compiled runner evidence.
-- [ ] Validate AutoIt source and compiled delivery in the disposable VM, then implement the selected engine-neutral schema-v2 runner.
-- [ ] Validate the Parallels latest-version resolver, actual vendor signer, minimal mode-1 shared-device XML, repeat/upgrade behavior, detection, and uninstall in the disposable VM.
+- [x] Complete AutoIt source and compiled delivery validation in the disposable VM. Interpreted and compiled forms ran clean for both a harmless synthetic probe and a realistic multi-screen captured installer (Notepad++ v8.9.8), including a true SYSTEM-context comparison and a Mark-of-the-Web/SmartScreen check; Defender scans found no detections on any artifact. A GUI installer wizard does not reliably complete under a true non-interactive SYSTEM session (an informative negative result, not a bug) and belongs in user-context deployment instead. See `docs/TestVM.md`.
+- [ ] Implement the selected engine-neutral schema-v2 runner: a generic interpreter that drives AutoIt directly from a capture file. This session hand-implemented one capture as a one-off script to prove the technique end to end; a reusable generic runner is still future work.
+- [x] Complete Parallels validation in the disposable VM. Install, mode-1 shared-device XML import (verified via registry against the generated XML, no credentials present), repeat/repair (connection state explicitly verified to survive, not assumed), uninstall (installed-program/service/files removed; the shared-connection registry key is left as residue, noted but not cleaned up), and fail-closed hash/signer validation are all verified for 21.2.27311 with a valid Parallels International GmbH signature. See `docs/TestVM.md`.
+- [ ] Build the Parallels guided configuration generator so `ParallelsConnection.config.psd1` isn't hand-authored; the last blocker before promoting the catalog entry past `RequiresRepair`.
 - [ ] Replace the GitHub repository refs with the verified sanitized root after repository visibility is private, then uplift each downstream customer repository deliberately rather than merging unrelated histories.
 
 ### Phase 4 — Deployment engine
@@ -197,4 +176,4 @@ Run:
 .\tools\Test-Repo.ps1
 ```
 
-Expected baseline at this checkpoint: Windows PowerShell 5.1 parser/module import passes, PowerShell 7 parser/preflight is clean, zero committed `.intunewin` files, zero private-key artifacts, zero executable payloads, zero known downstream client markers, no embedded app assignments, no likely embedded secret literals, no literal tenant deployment identifiers, no duplicate or nonliteral deployable identities, no file-mutating deployable settings, no blocked catalog entries, and at least 298 passing Pester tests. The exact test count should be advanced with each added regression. A missing active signing generation, `IntuneWin32App` package module, or GitHub CLI is a warning until its corresponding operation is deliberately invoked.
+Expected baseline at this checkpoint: Windows PowerShell 5.1 parser/module import passes, PowerShell 7 parser/preflight is clean, zero committed `.intunewin` files, zero private-key artifacts, zero executable payloads, zero known downstream client markers, no embedded app assignments, no likely embedded secret literals, no literal tenant deployment identifiers, no duplicate or nonliteral deployable identities, no file-mutating deployable settings, no blocked catalog entries, and 304 passing Pester tests. A missing active signing generation, `NSP.Bootstrap`, `IntuneWin32App`, or GitHub CLI is a warning until its corresponding operation is deliberately invoked.

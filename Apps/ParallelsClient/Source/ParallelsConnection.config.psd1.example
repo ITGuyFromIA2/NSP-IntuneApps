@@ -4,7 +4,7 @@
     Port                  = 443
 
     # Latest resolves the current x64 Windows MSI from the vendor's official
-    # download page each time the Intune install command runs. Use Pinned only
+    # JSON download catalog each time the Intune install command runs. Use Pinned only
     # for a documented compatibility requirement.
     SourceMode            = 'Latest'
     DownloadPageUri       = 'https://www.parallels.com/products/ras/download/client/'

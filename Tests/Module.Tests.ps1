@@ -1,5 +1,3 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-
 Describe 'NSP.IntuneApps module' {
     BeforeAll {
         $repoRoot = Split-Path -Path $PSScriptRoot -Parent
@@ -60,17 +58,17 @@ Describe 'NSP.IntuneApps module' {
     }
 
     It 'keeps generated Intune packages out of source control' {
-        (Get-Content -LiteralPath (Join-Path $repoRoot '.gitignore') -Raw) | Should -Match '(?m)^\*\.intunewin$'
+        Get-Content -LiteralPath (Join-Path $repoRoot '.gitignore') | Should -Contain '*.intunewin'
         @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'Apps') -Recurse -File -Filter '*.intunewin').Count | Should -Be 0
     }
 
     It 'keeps private keys and executable payloads out of public source control' {
-        $ignore = Get-Content -LiteralPath (Join-Path $repoRoot '.gitignore') -Raw
-        $ignore | Should -Match '(?m)^\*\.pfx$'
-        $ignore | Should -Match '(?m)^\*\.exe$'
-        @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File | Where-Object {
-            $_.FullName -notlike '*\.git\*' -and $_.Extension -in @('.pfx','.p12','.pem','.key','.exe','.msi','.dll')
-        }).Count | Should -Be 0
+        $ignore = Get-Content -LiteralPath (Join-Path $repoRoot '.gitignore')
+        $ignore | Should -Contain '*.pfx'
+        $ignore | Should -Contain '*.exe'
+        $result = Test-NSPIntuneAppsPreflight -RepoRoot $repoRoot
+        @($result.PrivateKeyArtifacts).Count | Should -Be 0
+        @($result.BinaryPayloads).Count | Should -Be 0
     }
 
     It 'keeps the Gen1 delete/recreate uploader guarded' {

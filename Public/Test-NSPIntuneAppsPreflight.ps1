@@ -40,12 +40,33 @@ function Test-NSPIntuneAppsPreflight {
     $intuneWinFiles = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'Apps') -Recurse -File -Filter '*.intunewin')
     & $add 'Repository' 'Generated Intune packages' $(if ($intuneWinFiles.Count -eq 0) { 'Pass' } else { 'Blocked' }) "$($intuneWinFiles.Count) .intunewin file(s) present"
 
-    $repositoryFiles = @(Get-ChildItem -LiteralPath $RepoRoot -Recurse -File | Where-Object { $_.FullName -notlike '*\.git\*' })
-    $privateKeyArtifacts = @($repositoryFiles | Where-Object { $_.Extension -in @('.pfx','.p12','.pem','.key') })
-    & $add 'Safety' 'Private-key artifacts' $(if ($privateKeyArtifacts.Count -eq 0) { 'Pass' } else { 'Blocked' }) $(if ($privateKeyArtifacts.Count -eq 0) { 'No PFX, PKCS#12, PEM, or key files are present in repository source' } else { "$($privateKeyArtifacts.Count) private-key artifact(s) present" })
+    $repositoryFiles = $null
+    $gitDirectory = Join-Path $RepoRoot '.git'
+    if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $gitDirectory)) {
+        $gitPaths = @(& git -C $RepoRoot ls-files --cached --others --exclude-standard 2>$null)
+        if ($LASTEXITCODE -eq 0) {
+            $repositoryFiles = @($gitPaths |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                ForEach-Object { Get-Item -LiteralPath (Join-Path $RepoRoot $_) -ErrorAction SilentlyContinue } |
+                Where-Object { $_ -and -not $_.PSIsContainer })
+        }
+    }
+    if ($null -eq $repositoryFiles) {
+        # git is unavailable or failed: a raw filesystem scan would include ignored local
+        # evidence (Config/Local, extracted vendor archives) and misreport it as committed.
+        # Report degraded confidence instead of guessing.
+        $privateKeyArtifacts = @()
+        $binaryPayloads = @()
+        $gitUnavailableDetail = 'git was not found on PATH (or `git ls-files` failed), so repository-tracked-file safety checks could not be verified and were skipped. Install Git or add it to PATH to run this check.'
+        & $add 'Safety' 'Private-key artifacts' 'Warning' $gitUnavailableDetail
+        & $add 'Repository' 'Committed binary payloads' 'Warning' $gitUnavailableDetail
+    } else {
+        $privateKeyArtifacts = @($repositoryFiles | Where-Object { $_.Extension -in @('.pfx','.p12','.pem','.key') })
+        & $add 'Safety' 'Private-key artifacts' $(if ($privateKeyArtifacts.Count -eq 0) { 'Pass' } else { 'Blocked' }) $(if ($privateKeyArtifacts.Count -eq 0) { 'No PFX, PKCS#12, PEM, or key files are present in repository source' } else { "$($privateKeyArtifacts.Count) private-key artifact(s) present" })
 
-    $binaryPayloads = @($repositoryFiles | Where-Object { $_.Extension -in @('.exe','.msi','.dll') })
-    & $add 'Repository' 'Committed binary payloads' $(if ($binaryPayloads.Count -eq 0) { 'Pass' } else { 'Blocked' }) $(if ($binaryPayloads.Count -eq 0) { 'No executable vendor or build payloads are committed' } else { "$($binaryPayloads.Count) executable payload(s) present" })
+        $binaryPayloads = @($repositoryFiles | Where-Object { $_.Extension -in @('.exe','.msi','.dll') })
+        & $add 'Repository' 'Committed binary payloads' $(if ($binaryPayloads.Count -eq 0) { 'Pass' } else { 'Blocked' }) $(if ($binaryPayloads.Count -eq 0) { 'No executable vendor or build payloads are committed' } else { "$($binaryPayloads.Count) executable payload(s) present" })
+    }
 
     $downstreamPattern = 'simpco|greenberg|chesterman|klass|scigrain|sscha|hnrco|\bHnR\b|gm\.nsp|gmrds|accubuild|caasiouxland|sschousingagency'
     $downstreamFiles = @(Get-ChildItem -LiteralPath $RepoRoot -Recurse -File |

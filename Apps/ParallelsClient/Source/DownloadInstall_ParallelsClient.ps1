@@ -34,34 +34,90 @@ function Get-ParallelsLatestMsiUri {
         throw "The Parallels download page must be an HTTPS parallels.com address: $DownloadPageUri"
     }
 
+    $metadataRoot = [uri]'https://download.parallels.com/website_links/'
     $handler = [Net.Http.HttpClientHandler]::new()
     $handler.AutomaticDecompression = [Net.DecompressionMethods]::GZip -bor [Net.DecompressionMethods]::Deflate
     $client = [Net.Http.HttpClient]::new($handler)
     $client.Timeout = [TimeSpan]::FromSeconds(60)
     $client.DefaultRequestHeaders.UserAgent.ParseAdd('NSP-IntuneApps/1.0')
+
+    function Get-ParallelsMetadata {
+        param([Parameter(Mandatory)][string]$RelativePath)
+
+        if ($RelativePath -notmatch '^[A-Za-z0-9._/-]+\.json$' -or $RelativePath -match '(^|/)\.\.(/|$)') {
+            throw "The Parallels metadata catalog returned an unsafe JSON path: $RelativePath"
+        }
+        $uri = [uri]::new($metadataRoot, $RelativePath)
+        if ($uri.Scheme -ne 'https' -or $uri.DnsSafeHost -ne 'download.parallels.com') {
+            throw "The Parallels metadata URI left the approved publisher host: $uri"
+        }
+
+        $response = $client.GetAsync($uri).GetAwaiter().GetResult()
+        try {
+            $response.EnsureSuccessStatusCode() | Out-Null
+            $finalUri = $response.RequestMessage.RequestUri
+            if ($finalUri.Scheme -ne 'https' -or $finalUri.DnsSafeHost -ne 'download.parallels.com') {
+                throw "The Parallels metadata request redirected outside the approved publisher host: $finalUri"
+            }
+            $json = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            return $json | ConvertFrom-Json
+        }
+        finally {
+            $response.Dispose()
+        }
+    }
+
     try {
-        $html = $client.GetStringAsync($DownloadPageUri).GetAwaiter().GetResult()
+        $catalog = Get-ParallelsMetadata -RelativePath 'index.json'
+        $rasIndexPath = [string]$catalog.ras.index
+        if ($rasIndexPath -ne 'ras/index.json') {
+            throw "The Parallels metadata catalog returned an unexpected RAS index path: $rasIndexPath"
+        }
+
+        $rasIndex = Get-ParallelsMetadata -RelativePath $rasIndexPath
+        $versions = @($rasIndex.PSObject.Properties.Name | ForEach-Object {
+            try {
+                $normalizedVersion = if ($_ -match '^\d+$') { "$_.0" } else { $_ }
+                [pscustomobject]@{ Text = $_; Parsed = [version]$normalizedVersion }
+            }
+            catch { }
+        } | Sort-Object Parsed -Descending)
+        if ($versions.Count -eq 0) {
+            throw 'The Parallels metadata catalog did not contain a recognizable RAS version.'
+        }
+
+        $latestVersion = $versions[0].Text
+        $latestEntry = $rasIndex.PSObject.Properties[$latestVersion].Value
+        $buildsPath = [string]$latestEntry.builds.en_US
+        if ([string]::IsNullOrWhiteSpace($buildsPath)) {
+            throw "The Parallels metadata catalog did not contain English build metadata for RAS $latestVersion."
+        }
+        $builds = @(Get-ParallelsMetadata -RelativePath $buildsPath)
+
+        $candidates = [Collections.Generic.List[uri]]::new()
+        foreach ($category in $builds) {
+            foreach ($item in @($category.contents)) {
+                if (-not $item.files) { continue }
+                foreach ($file in $item.files.PSObject.Properties) {
+                    if ($file.Name -ne 'Parallels Client (Windows) 64-bit Setup') { continue }
+                    $candidate = [uri][string]$file.Value
+                    if ($candidate.Scheme -ne 'https' -or $candidate.DnsSafeHost -ne 'download.parallels.com' -or
+                        $candidate.AbsolutePath -notmatch '(?i)/RASClient-x64-[^/]+\.msi$') {
+                        throw "The Parallels catalog returned an unexpected x64 client URI: $candidate"
+                    }
+                    $candidates.Add($candidate)
+                }
+            }
+        }
     }
     finally {
         $client.Dispose()
         $handler.Dispose()
     }
 
-    $candidates = [Collections.Generic.List[uri]]::new()
-    $anchorPattern = '(?is)<a\b[^>]*?href\s*=\s*["''](?<href>[^"'']+)["''][^>]*>(?<text>.*?)</a>'
-    foreach ($match in [regex]::Matches($html, $anchorPattern)) {
-        $text = [Net.WebUtility]::HtmlDecode(([regex]::Replace($match.Groups['text'].Value, '<[^>]+>', ' ')))
-        $href = [Net.WebUtility]::HtmlDecode($match.Groups['href'].Value)
-        if ($text -notmatch '(?i)(Remote Application Server|RAS).*Client.*Windows.*64-bit.*Setup' -and
-            $href -notmatch '(?i)RASClient[^/]*-x64\.msi(?:\?|$)') { continue }
-
-        $candidate = [uri]::new($DownloadPageUri, $href)
-        if ($candidate.Scheme -eq 'https') { $candidates.Add($candidate) }
-    }
-
     $unique = @($candidates | Select-Object -ExpandProperty AbsoluteUri -Unique)
     if ($unique.Count -ne 1) {
-        throw "Expected exactly one current x64 Parallels RAS Client MSI link on $DownloadPageUri; found $($unique.Count). The vendor page shape may have changed."
+        throw "Expected exactly one current x64 Parallels RAS Client MSI in the official metadata catalog; found $($unique.Count). The vendor catalog shape may have changed."
     }
     [uri]$unique[0]
 }
@@ -75,7 +131,10 @@ function Save-ValidatedParallelsMsi {
     )
 
     if ($Uri.Scheme -ne 'https') { throw "Refusing to download an installer over non-HTTPS URI: $Uri" }
-    $temporaryPath = "$DestinationPath.download"
+    $destinationDirectory = Split-Path -Path $DestinationPath -Parent
+    $destinationName = [IO.Path]::GetFileNameWithoutExtension($DestinationPath)
+    $destinationExtension = [IO.Path]::GetExtension($DestinationPath)
+    $temporaryPath = Join-Path $destinationDirectory ("{0}.download{1}" -f $destinationName, $destinationExtension)
     Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
     try {
         $handler = [Net.Http.HttpClientHandler]::new()
@@ -114,8 +173,15 @@ function Save-ValidatedParallelsMsi {
             throw "Pinned Parallels MSI hash mismatch. Expected $RequiredSha256; received $actualHash."
         }
 
-        $signature = Get-AuthenticodeSignature -LiteralPath $temporaryPath
-        if ($signature.Status -ne 'Valid') { throw "The downloaded Parallels MSI signature is not valid: $($signature.Status)." }
+        $signature = $null
+        for ($attempt = 1; $attempt -le 10; $attempt++) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $temporaryPath
+            if ($signature.Status -ne 'UnknownError' -or $attempt -eq 10) { break }
+            Start-Sleep -Seconds 1
+        }
+        if ($signature.Status -ne 'Valid') {
+            throw "The downloaded Parallels MSI signature from $Uri is not valid: $($signature.Status). $($signature.StatusMessage) Path: $temporaryPath; SHA-256: $actualHash."
+        }
         if (-not $signature.SignerCertificate -or $signature.SignerCertificate.Subject -notmatch $SignerPattern) {
             throw "The downloaded MSI signer '$($signature.SignerCertificate.Subject)' does not match the approved signer pattern."
         }

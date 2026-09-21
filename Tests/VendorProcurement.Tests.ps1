@@ -11,11 +11,12 @@ Describe 'Vendor dependency procurement' {
         $install | Should -Match 'Bitdefender'
     }
 
-    It 'does not redistribute SetACL and keeps normal execution blocked until VM hash review' {
+    It 'does not redistribute SetACL and pins the reviewed publisher archive' {
         $helperPath = Join-Path $repoRoot 'Apps\DelegateService\Source\Get-NSPSetAcl.ps1'
         $helper = Get-Content -LiteralPath $helperPath -Raw
         $helper | Should -Match 'https://helgeklein\.com/files/SetACL/current/'
-        $helper | Should -Match 'REPLACE_AFTER_VM_VALIDATION'
+        $helper | Should -Match 'BA74399A70963C156580180455FBFC0FA68EA673A64EB89010A46273C7D478CC'
+        $helper | Should -Not -Match 'REPLACE_AFTER_VM_VALIDATION'
         $helper | Should -Match '\$AuditOnly'
         $helper | Should -Match 'MaximumRedirection 0'
         $helper | Should -Match 'unsafe path'

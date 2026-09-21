@@ -1,7 +1,8 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
+$script:gitAvailable = [bool](Get-Command git -ErrorAction SilentlyContinue)
 
 Describe 'Printer release manifests' {
     BeforeAll {
+        $repoRoot = Split-Path -Path $PSScriptRoot -Parent
         $manifestRoot = Join-Path $repoRoot 'Artifacts\PrinterDrivers'
         $manifests = @(Get-ChildItem -LiteralPath $manifestRoot -File -Filter '*.release.json')
     }
@@ -24,7 +25,7 @@ Describe 'Printer release manifests' {
         }
     }
 
-    It 'does not track staged ZIP payloads in normal Git source' {
+    It 'does not track staged ZIP payloads in normal Git source' -Skip:(-not $script:gitAvailable) {
         $trackedZip = @(git -C $repoRoot ls-files 'Artifacts/PrinterDrivers/*.zip')
         $trackedZip.Count | Should -Be 0
     }

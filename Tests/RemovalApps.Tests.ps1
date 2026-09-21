@@ -1,5 +1,3 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-
 Describe 'Preinstalled app removal packages' {
     It '<Name> is an honest removal package without copied Chrome behavior' -ForEach @(
         @{ Name='Remove-LGEasyGuide' }

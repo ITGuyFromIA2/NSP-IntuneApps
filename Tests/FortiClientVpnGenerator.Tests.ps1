@@ -1,7 +1,9 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-Import-Module (Join-Path $repoRoot 'NSP.IntuneApps.psd1') -Force
-
 Describe 'FortiClient VPN configuration generator' {
+    BeforeAll {
+        $repoRoot = Split-Path -Path $PSScriptRoot -Parent
+        Import-Module (Join-Path $repoRoot 'NSP.IntuneApps.psd1') -Force
+    }
+
     It 'creates a self-contained configuration app without modifying the upstream template' {
         $templateHashBefore = (Get-FileHash -LiteralPath (Join-Path $repoRoot 'Apps\FortiClient_ImportConfig\Source\VPNConfig_Add.reg') -Algorithm SHA256).Hash
         $result = New-NSPFortiClientVpnConfigApp -RepoRoot $repoRoot -TunnelName 'Example VPN' -Server 'https://vpn.example.invalid:8443' -Description 'Example tunnel' -EnableSso $true -UseExternalBrowser $true -OutputRoot $TestDrive

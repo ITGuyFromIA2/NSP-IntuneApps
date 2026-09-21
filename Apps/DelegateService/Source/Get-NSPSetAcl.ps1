@@ -4,8 +4,8 @@ function Get-NSPSetAcl {
         Retrieves SetACL directly from its publisher and selects the requested architecture.
     .DESCRIPTION
         SetACL is not redistributed in this repository or the Intune package. The fixed-version
-        archive is downloaded over HTTPS from the publisher during installation. Normal use is
-        blocked until the archive hash has been recorded from the disposable-VM audit.
+        archive is downloaded over HTTPS from the publisher during installation and validated
+        against the SHA-256 recorded by the disposable-machine provenance audit.
     #>
     [CmdletBinding()]
     param(
@@ -18,8 +18,8 @@ function Get-NSPSetAcl {
     $version = '3.1.2'
     $archiveUri = [uri]'https://helgeklein.com/files/SetACL/current/SetACL%203.1.2%20%28executable%20version%29.zip'
 
-    # Replace only after the disposable-VM audit records the official archive's SHA-256.
-    $expectedSha256 = 'REPLACE_AFTER_VM_VALIDATION'
+    # Recorded 2026-09-19 from the publisher archive after signature and contents review.
+    $expectedSha256 = 'BA74399A70963C156580180455FBFC0FA68EA673A64EB89010A46273C7D478CC'
 
     if ($archiveUri.Scheme -ne 'https' -or $archiveUri.DnsSafeHost -ne 'helgeklein.com') {
         throw "Unexpected SetACL source URI: $archiveUri"
@@ -35,9 +35,6 @@ function Get-NSPSetAcl {
         Invoke-WebRequest -Uri $archiveUri.AbsoluteUri -OutFile $archivePath -UseBasicParsing -MaximumRedirection 0
         $archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToUpperInvariant()
 
-        if (-not $AuditOnly -and $expectedSha256 -eq 'REPLACE_AFTER_VM_VALIDATION') {
-            throw 'SetACL installation is intentionally blocked until its official archive hash is recorded by the disposable-VM audit. Run this function with -AuditOnly first.'
-        }
         if (-not $AuditOnly -and $archiveHash -ne $expectedSha256) {
             throw "SetACL archive failed SHA-256 validation. Expected $expectedSha256; received $archiveHash."
         }

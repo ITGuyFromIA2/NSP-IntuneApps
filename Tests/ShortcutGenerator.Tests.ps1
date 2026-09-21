@@ -1,7 +1,9 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-Import-Module (Join-Path $repoRoot 'NSP.IntuneApps.psd1') -Force
-
 Describe 'Shortcut generator' {
+    BeforeAll {
+        $repoRoot = Split-Path -Path $PSScriptRoot -Parent
+        Import-Module (Join-Path $repoRoot 'NSP.IntuneApps.psd1') -Force
+    }
+
     It 'generates a default-browser web shortcut app' {
         $result = New-NSPShortcutApp -RepoRoot $repoRoot -Mode WebDefault -Name 'Example Portal' -Target 'https://portal.example.invalid' -OutputRoot $TestDrive
         $config = Get-Content -LiteralPath (Join-Path $result.Path 'Source\Shortcut.config.json') -Raw | ConvertFrom-Json

@@ -1,5 +1,3 @@
-$repoRoot = Split-Path -Path $PSScriptRoot -Parent
-
 Describe 'Deployment action resolver' {
     BeforeAll {
         Import-Module (Join-Path (Split-Path -Path $PSScriptRoot -Parent) 'NSP.IntuneApps.psd1') -Force
