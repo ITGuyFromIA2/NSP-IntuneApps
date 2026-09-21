@@ -120,6 +120,12 @@ The downstream Adobe variants required consolidation rather than direct copying.
 
 ### Phase 4 — Deployment engine
 
+An approved implementation plan for the "Create" path of this phase (real app creation against
+a tenant, using VCred as the proof case) is written up in
+[docs/DeploymentExecutorPlan.md](docs/DeploymentExecutorPlan.md), ready to build on a machine
+connected to the tenant that will actually be used. Update-in-place and supersedence execution
+are deliberately out of scope for that first pass.
+
 - [x] Define stable management markers and offline action resolution.
 - [x] Compute deterministic metadata and source-content hashes while ignoring Authenticode renewal and checkout line endings.
 - [ ] Record the deterministic source hashes in Intune Notes during create/update execution.
