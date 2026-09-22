@@ -7,12 +7,14 @@ function Register-NSPIntuneWin32AppRegistration {
         Plan-only is the default. Use -Execute and approve ShouldProcess to actually
         create the application, service principal, and admin consent grant. If a
         registration is already recorded and still exists in the tenant, no duplicate
-        is created.
+        is created. -TenantId is optional: the interactive login already resolves the
+        tenant, so it is read from the connected Graph context. Pass -TenantId only as
+        a safety check to fail fast if you land in the wrong tenant.
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     param(
         [Parameter(Mandatory)][string]$RepoRoot,
-        [Parameter(Mandatory)][string]$TenantId,
+        [string]$TenantId,
         [switch]$Execute
     )
 
@@ -28,9 +30,10 @@ function Register-NSPIntuneWin32AppRegistration {
 
     $connectScopes = @('Application.ReadWrite.All', 'Directory.ReadWrite.All', 'DelegatedPermissionGrant.ReadWrite.All')
     $context = Connect-NSPGraph -Scopes $connectScopes -Connect
-    if ($context.TenantId -ne $TenantId) {
+    if ($TenantId -and $context.TenantId -ne $TenantId) {
         throw "Connected to tenant $($context.TenantId), which does not match the requested TenantId $TenantId. Reconnect against the correct tenant."
     }
+    $TenantId = $context.TenantId
 
     if (Test-Path -LiteralPath $recordPath) {
         $record = Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json

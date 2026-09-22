@@ -6,6 +6,8 @@ Clone that new repository, then register NSP-IntuneApps as its upstream source:
     cd CLIENT-IntuneApps
     git remote add upstream https://github.com/ITGuyFromIA2/NSP-IntuneApps.git
     git fetch upstream
-    git merge upstream/main
+    git merge upstream/main --allow-unrelated-histories
+
+A new GitHub-created repository starts with its own "Initial commit" with no shared ancestor with upstream, so a plain `git merge upstream/main` is refused with "refusing to merge unrelated histories." The `--allow-unrelated-histories` flag is only needed for this first merge; every later `git fetch upstream && git merge upstream/main` is a normal merge.
 
 Before transferring a downstream repository during offboarding, remove all NSP code-signing PFX/CER artifacts, local plan files, cached release assets, tenant identifiers, secrets, and credentials. Generated .intunewin files are build output and are not part of upstream source.

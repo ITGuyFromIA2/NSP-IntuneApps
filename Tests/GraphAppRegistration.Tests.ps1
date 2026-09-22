@@ -30,6 +30,18 @@ Describe 'Register-NSPIntuneWin32AppRegistration' {
         Should -Invoke New-MgApplication -Times 0 -ModuleName NSP.IntuneApps
     }
 
+    It 'derives the tenant from the connected Graph context when -TenantId is omitted' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Get-MgServicePrincipal { New-FixtureGraphServicePrincipal } -ModuleName NSP.IntuneApps
+
+        $repoRoot = Join-Path $TestDrive 'no-tenant-arg'
+        New-Item -ItemType Directory -Path $repoRoot -Force | Out-Null
+        $result = Register-NSPIntuneWin32AppRegistration -RepoRoot $repoRoot
+
+        $result.Status | Should -Be 'PlanOnly'
+        $result.TenantId | Should -Be 'tenant-1'
+    }
+
     It 'throws when the connected tenant does not match the requested tenant' {
         Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-2'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
 
