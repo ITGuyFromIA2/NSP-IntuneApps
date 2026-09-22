@@ -75,7 +75,7 @@ function New-NSPIntuneWin32App {
     $app = Add-IntuneWin32App @addArguments
     if (-not $app) { throw "Add-IntuneWin32App did not return the created app for '$AppName'." }
 
-    $graphContext = Connect-NSPGraph -Scopes 'DeviceManagementApps.ReadWrite.All' -Connect
+    $graphContext = Connect-NSPGraph -Scopes 'DeviceManagementApps.ReadWrite.All' -Connect -ClientId $ClientId -TenantId $TenantId
     if ($graphContext.TenantId -ne $TenantId) {
         throw "Created app $($app.id) in tenant $TenantId, but the metadata PATCH session connected to $($graphContext.TenantId) instead. Reconnect against the correct tenant to record management notes for '$AppName'."
     }

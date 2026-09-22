@@ -36,6 +36,19 @@
         }
       }
     },
+    "WindowTitleTimeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["AtUtc", "WindowTitle", "IsManualCapture"],
+        "properties": {
+          "AtUtc": { "type": "string", "format": "date-time" },
+          "WindowTitle": { "type": "string" },
+          "IsManualCapture": { "type": "boolean" }
+        }
+      }
+    },
     "Steps": {
       "type": "array",
       "minItems": 1,

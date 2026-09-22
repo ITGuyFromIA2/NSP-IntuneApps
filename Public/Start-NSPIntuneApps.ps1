@@ -29,19 +29,26 @@ function Start-NSPIntuneApps {
             $planStatus
             "Runs: $($savedRuns.Count) saved | $(@($savedRuns | Where-Object Status -eq 'AttentionRequired').Count) need attention"
         )
-        Write-Host '[1] Preflight details'
-        Write-Host '[2] App catalog'
-        Write-Host '[3] Create from a guided template'
-        Write-Host '[4] Code-signing certificate status'
-        Write-Host '[5] Plan certificate trust upload'
-        Write-Host '[6] Create/review an app deployment tracker'
-        Write-Host '[7] Save a read-only Intune app inventory'
-        Write-Host '[8] Resume a saved deployment tracker'
-        Write-Host '[9] View resumable deployment run journals'
-        Write-Host '[10] Advance the next stage of a saved run'
-        Write-Host '[11] Register/verify the tenant app registration (one-time bootstrap)'
-        Write-Host '[Q] Quit'
-        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','11','Q')
+        Write-Host '--- Discover & build ---' -ForegroundColor DarkCyan
+        Write-Host '  [1] Preflight details'
+        Write-Host '  [2] App catalog'
+        Write-Host '  [3] Create from a guided template'
+        Write-Host '--- Code signing ---' -ForegroundColor DarkCyan
+        Write-Host '  [4] Code-signing certificate status'
+        Write-Host '  [5] Plan certificate trust upload'
+        Write-Host '--- Deployment planning ---' -ForegroundColor DarkCyan
+        Write-Host '  [6] Create/review an app deployment tracker'
+        Write-Host '  [7] Save a read-only Intune app inventory'
+        Write-Host '  [8] Resume a saved deployment tracker'
+        Write-Host '--- Deployment execution ---' -ForegroundColor DarkCyan
+        Write-Host '  [9] View resumable deployment run journals'
+        Write-Host '  [10] Advance the next stage of a saved run'
+        Write-Host '--- Tenant administration ---' -ForegroundColor DarkCyan
+        Write-Host '  [11] Register/verify the tenant app registration (one-time bootstrap)'
+        Write-Host '  [12] Delete an existing Intune app (irreversible)' -ForegroundColor Red
+        Write-Host ''
+        Write-Host '  [Q] Quit'
+        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','11','12','Q')
 
         switch ($choice) {
             '1' {
@@ -63,7 +70,7 @@ function Start-NSPIntuneApps {
                 elseif ($template -eq 'B') { New-NSPRdpApp -RepoRoot $RepoRoot -Interactive }
                 elseif ($template -eq 'C') { New-NSPPrinterApp -RepoRoot $RepoRoot -Interactive }
                 elseif ($template -eq 'D') {
-                    Write-Host 'Example: C:\Temp\VendorSetup.exe'
+                    Write-Host 'Example: C:\Temp\VendorSetup.exe' -ForegroundColor DarkGray
                     $installerPath = Read-Host 'Installer path'
                     Start-NSPInstallerCapture -InstallerPath $installerPath
                 }
@@ -138,7 +145,7 @@ function Start-NSPIntuneApps {
                         $review.Entries | Format-Table Order, Name, PlannedAction, Decision, CanApprove, Effect -Wrap
                     }
                 }
-                Write-Host 'The inventory and any tracker resolution were read-only with respect to Intune.'
+                Write-Host 'The inventory and any tracker resolution were read-only with respect to Intune.' -ForegroundColor DarkGray
             }
             '8' {
                 $recentPlans = @($savedPlans | Select-Object -First 9)
@@ -238,6 +245,41 @@ function Start-NSPIntuneApps {
                         $result | Format-List
                     } else {
                         Write-Host 'No changes were made.' -ForegroundColor Yellow
+                    }
+                }
+            }
+            '12' {
+                $inventoryRoot = Join-Path $RepoRoot '.nsp-intuneapps\inventory'
+                $latestInventory = if (Test-Path -LiteralPath $inventoryRoot) { Get-ChildItem -LiteralPath $inventoryRoot -Filter '*.json' -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 } else { $null }
+                $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+                if (-not $latestInventory) {
+                    Write-Warning 'No saved Intune app inventory was found. Use [7] to save one first, so an app can be picked by name instead of a raw object ID.'
+                } elseif (-not (Test-Path -LiteralPath $registrationPath)) {
+                    Write-Warning 'No tenant app registration is recorded. Use [11] first.'
+                } else {
+                    $inventoryDocument = Get-Content -LiteralPath $latestInventory.FullName -Raw | ConvertFrom-Json
+                    $apps = @($inventoryDocument.Apps)
+                    if ($apps.Count -eq 0) {
+                        Write-Warning "The most recent saved inventory ($($latestInventory.Name)) has no apps."
+                    } else {
+                        Write-Host "From inventory: $($latestInventory.Name) (tenant $($inventoryDocument.TenantId))" -ForegroundColor Cyan
+                        for ($index = 0; $index -lt $apps.Count; $index++) {
+                            Write-Host ("  [{0}] {1} | {2}" -f ($index + 1), $apps[$index].DisplayName, $apps[$index].Id)
+                        }
+                        $allowedApps = @(1..$apps.Count | ForEach-Object { [string]$_ })
+                        $appChoice = Read-NSPMenuChoice -Prompt 'App to delete' -Allowed $allowedApps
+                        $targetApp = $apps[[int]$appChoice - 1]
+                        $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+                        $preview = Remove-NSPIntuneWin32App -IntuneObjectId $targetApp.Id -DisplayName $targetApp.DisplayName -TenantId $inventoryDocument.TenantId -ClientId $registration.ClientId
+                        $preview | Format-List
+                        Write-Warning 'This permanently deletes the app object from the tenant. It cannot be undone.'
+                        $confirmText = Read-Host "Type the app's exact display name to confirm deletion, or press Enter to cancel"
+                        if ($confirmText -eq $targetApp.DisplayName) {
+                            $result = Remove-NSPIntuneWin32App -IntuneObjectId $targetApp.Id -DisplayName $targetApp.DisplayName -TenantId $inventoryDocument.TenantId -ClientId $registration.ClientId -Execute -Confirm:$false
+                            $result | Format-List
+                        } else {
+                            Write-Host 'No changes were made.' -ForegroundColor Yellow
+                        }
                     }
                 }
             }

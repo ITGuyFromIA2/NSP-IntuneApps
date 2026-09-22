@@ -2,12 +2,22 @@ function Connect-NSPGraph {
     <#
     .SYNOPSIS
         Connects to Microsoft Graph or validates an existing delegated context, with the required scopes.
+    .DESCRIPTION
+        Pass -ClientId/-TenantId (the recorded NSP-IntuneApps-Win32AppDeployment registration) to
+        authenticate as that app instead of the Microsoft Graph PowerShell SDK's own default app.
+        Since that app already has org-wide admin consent for everything this tool needs, Azure AD
+        recognizes it as pre-consented and can pass through silently instead of prompting - the
+        same benefit IntuneWin32App's Connect-MSIntuneGraph already gets from using one app
+        consistently. Without them, this falls back to the SDK's own default app (unchanged
+        behavior for callers that don't yet know a registration exists).
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string[]]$Scopes,
         [switch]$Connect,
-        [switch]$Optional
+        [switch]$Optional,
+        [string]$ClientId,
+        [string]$TenantId
     )
 
     if ($Connect) {
@@ -16,7 +26,10 @@ function Connect-NSPGraph {
             Install-NSPModule -Name Microsoft.Graph.Authentication -Scope CurrentUser
         }
         Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-        Connect-MgGraph -Scopes $Scopes -NoWelcome | Out-Null
+        $connectArgs = @{ Scopes = $Scopes; NoWelcome = $true }
+        if ($ClientId) { $connectArgs.ClientId = $ClientId }
+        if ($TenantId) { $connectArgs.TenantId = $TenantId }
+        Connect-MgGraph @connectArgs | Out-Null
     }
 
     $context = if (Get-Command Get-MgContext -ErrorAction SilentlyContinue) { Get-MgContext } else { $null }

@@ -33,7 +33,9 @@ function Set-NSPAppManagementNotes {
 
     if (-not $PSCmdlet.ShouldProcess($IntuneObjectId, "Patch management notes for '$AppName'")) { return }
 
-    $graphContext = Connect-NSPGraph -Scopes 'DeviceManagementApps.ReadWrite.All' -Connect
+    $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+    $registration = if (Test-Path -LiteralPath $registrationPath) { Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json } else { $null }
+    $graphContext = Connect-NSPGraph -Scopes 'DeviceManagementApps.ReadWrite.All' -Connect -ClientId ([string]$registration.ClientId) -TenantId ([string]$registration.TenantId)
     $patchBody = @{ '@odata.type' = '#microsoft.graph.win32LobApp'; notes = $sourceState.ManagementNotes } | ConvertTo-Json
     Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps/$IntuneObjectId" -Body $patchBody -ContentType 'application/json' -ErrorAction Stop | Out-Null
 

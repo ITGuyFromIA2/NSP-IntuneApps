@@ -46,4 +46,5 @@ Export-ModuleMember -Function @(
     'Invoke-NSPAppDeploymentRunStage'
     'Update-NSPIntuneWin32AppContent'
     'Set-NSPAppManagementNotes'
+    'Remove-NSPIntuneWin32App'
 )

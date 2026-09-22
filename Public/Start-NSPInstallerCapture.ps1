@@ -4,9 +4,16 @@ function Start-NSPInstallerCapture {
         Launches an installer and records a reviewed draft of its UI states and actions.
     .DESCRIPTION
         Ctrl+Shift+F12 captures the foreground window and focused control without moving
-        focus back to PowerShell. Ctrl+Shift+F11 ends observation. The technician then
-        reviews each observation and describes the intended action. Sensitive data is
-        represented by a named runtime parameter and is never collected by the recorder.
+        focus back to PowerShell. Ctrl+Shift+F11 ends observation. Reconciliation (what
+        automation action this screen needs) happens immediately after each capture, while
+        the screen is still fresh, rather than as a separate batch pass at the end. A
+        background poller also records every distinct foreground window title seen for the
+        life of the installer process, tagged as auto-detected unless a manual capture also
+        landed on that same window, so a reviewer can see what passed by without a decision
+        as well as what a technician deliberately captured.
+
+        Sensitive data is represented by a named runtime parameter and is never collected by
+        the recorder.
 
         The resulting schema-v2 JSON is an editable automation design, not executable
         endpoint code. AutoIt is the planned execution layer; its delivery form is
@@ -122,114 +129,162 @@ public static class NSPInstallerCaptureNative {
     if ($ArgumentList) { $startParameters.ArgumentList = $ArgumentList }
     $installerProcess = Start-Process @startParameters
 
-    $observations = [Collections.Generic.List[object]]::new()
+    # Background timeline: every distinct foreground window title seen while the installer
+    # runs, independent of manual captures. A hashtable (reference type) lets the timer's
+    # event-subscriber scriptblock - which runs in its own runspace - mutate shared state.
+    $captureState = @{ LastTitle = $null; Timeline = [Collections.Generic.List[object]]::new() }
+    $pollTimer = [System.Timers.Timer]::new(500)
+    $pollTimer.AutoReset = $true
+    $pollSubscription = Register-ObjectEvent -InputObject $pollTimer -EventName Elapsed -MessageData $captureState -Action {
+        $state = $Event.MessageData
+        $handle = [NSPInstallerCaptureNative]::GetForegroundWindow()
+        $title = [NSPInstallerCaptureNative]::ReadWindowTitle($handle)
+        if ($title -ne $state.LastTitle) {
+            $state.LastTitle = $title
+            $state.Timeline.Add([ordered]@{
+                AtUtc           = (Get-Date).ToUniversalTime().ToString('o')
+                WindowTitle     = $title
+                IsManualCapture = $false
+            })
+        }
+    }
+    $pollTimer.Start()
+
     Write-Host ''
-    Write-Host 'Installer observation is active.' -ForegroundColor Cyan
-    Write-Host '  Ctrl+Shift+F12  Capture the current window and focused control'
-    Write-Host '  Ctrl+Shift+F11  Finish observation and review the captured states'
+    Write-Host '=== Installer observation is active ===' -ForegroundColor Cyan
+    Write-Host '  Ctrl+Shift+F12  Capture the current window and focused control, then describe what to do with it' -ForegroundColor White
+    Write-Host '  Ctrl+Shift+F11  Finish observation (use once every screen up to and including the final one is captured)' -ForegroundColor White
+    Write-Host 'These are global hotkeys: keep the installer window focused and press them without switching to PowerShell first.' -ForegroundColor DarkGray
+    Write-Host 'Every screen the installer shows is logged in the background automatically, even ones you do not capture manually - so nothing quietly slips past review.' -ForegroundColor DarkGray
     Write-Warning 'Do not enter passwords, license keys, client identifiers, or other secrets during capture.'
 
-    while ($true) {
-        $command = [NSPInstallerCaptureNative]::WaitForCommand()
-        if ($command -eq 2) { break }
-
-        $handle = [NSPInstallerCaptureNative]::GetForegroundWindow()
-        [uint32]$foregroundProcessId = 0
-        [void][NSPInstallerCaptureNative]::GetWindowThreadProcessId($handle, [ref]$foregroundProcessId)
-        $focused = [Windows.Automation.AutomationElement]::FocusedElement
-
-        $observations.Add([pscustomobject][ordered]@{
-            WindowTitle  = [NSPInstallerCaptureNative]::ReadWindowTitle($handle)
-            ProcessId    = $foregroundProcessId
-            ControlName  = if ($focused) { $focused.Current.Name } else { '' }
-            AutomationId = if ($focused) { $focused.Current.AutomationId } else { '' }
-            ControlType  = if ($focused -and $focused.Current.ControlType) { $focused.Current.ControlType.ProgrammaticName } else { '' }
-        })
-        Write-Host ("Captured observation {0}." -f $observations.Count) -ForegroundColor Green
-    }
-
-    if ($observations.Count -eq 0) {
-        Write-Warning 'No installer states were captured. No capture file was written.'
-        return
-    }
-
-    Write-Host ''
-    Write-Host 'Review each observation and describe the intended automation step.' -ForegroundColor Cyan
-    Write-Host 'Use a runtime parameter for anything sensitive or customer-specific.'
     $steps = [Collections.Generic.List[object]]::new()
     $runtimeParameters = [ordered]@{}
 
-    foreach ($observation in $observations) {
-        Write-Host ''
-        Write-Host ("Observation {0}: {1}" -f ($steps.Count + 1), $observation.WindowTitle) -ForegroundColor Yellow
-        Write-Host ("Focused control: {0} [{1}]  AutomationId: {2}" -f $observation.ControlName, $observation.ControlType, $observation.AutomationId)
-        Write-Host '[1] Click  [2] Set value  [3] Select option  [4] Send keys'
-        Write-Host '[5] Wait for window  [6] Wait for window to close  [7] Skip this observation'
-        $actionChoice = Read-NSPMenuChoice -Prompt 'Action' -Allowed @('1','2','3','4','5','6','7') -Default '1'
-        if ($actionChoice -eq '7') { continue }
+    try {
+        while ($true) {
+            $command = [NSPInstallerCaptureNative]::WaitForCommand()
+            if ($command -eq 2) { break }
 
-        $action = @{
-            '1' = 'Click'; '2' = 'SetValue'; '3' = 'Select'; '4' = 'SendKeys'
-            '5' = 'WaitForWindow'; '6' = 'WaitForWindowClose'
-        }[$actionChoice]
+            $handle = [NSPInstallerCaptureNative]::GetForegroundWindow()
+            [uint32]$foregroundProcessId = 0
+            [void][NSPInstallerCaptureNative]::GetWindowThreadProcessId($handle, [ref]$foregroundProcessId)
+            $focused = [Windows.Automation.AutomationElement]::FocusedElement
 
-        $expectedText = Read-Host ("Expected visible window text (Enter accepts '{0}')" -f $observation.ControlName)
-        if ([string]::IsNullOrWhiteSpace($expectedText)) { $expectedText = $observation.ControlName }
-        $matchChoice = Read-NSPMenuChoice -Prompt 'Window matching: [1] Contains  [2] Exact' -Allowed @('1','2') -Default '1'
-        $timeoutText = Read-Host 'Timeout in seconds (Enter accepts 60)'
-        $timeoutSeconds = 60
-        if ($timeoutText -and (-not [int]::TryParse($timeoutText, [ref]$timeoutSeconds) -or $timeoutSeconds -lt 1)) {
-            throw "Invalid timeout: $timeoutText"
-        }
-        $optional = (Read-NSPMenuChoice -Prompt 'May this screen be absent? [Y/N]' -Allowed @('Y','N') -Default 'N') -eq 'Y'
-
-        $valueDefinition = $null
-        if ($action -in @('SetValue','Select','SendKeys')) {
-            Write-Host '[1] Safe literal value  [2] Runtime parameter (required for secrets/client values)'
-            $valueChoice = Read-NSPMenuChoice -Prompt 'Value source' -Allowed @('1','2') -Default '2'
-            if ($valueChoice -eq '1') {
-                $literalValue = Read-Host 'Non-sensitive literal value'
-                $valueDefinition = [ordered]@{ Source = 'Literal'; Value = $literalValue }
+            $observation = [pscustomobject][ordered]@{
+                WindowTitle  = [NSPInstallerCaptureNative]::ReadWindowTitle($handle)
+                ProcessId    = $foregroundProcessId
+                ControlName  = if ($focused) { $focused.Current.Name } else { '' }
+                AutomationId = if ($focused) { $focused.Current.AutomationId } else { '' }
+                ControlType  = if ($focused -and $focused.Current.ControlType) { $focused.Current.ControlType.ProgrammaticName } else { '' }
             }
-            else {
-                do { $parameterName = Read-Host 'Runtime parameter name (for example LicenseKey)' }
-                while ($parameterName -notmatch '^[A-Za-z][A-Za-z0-9_]*$')
-                $isSensitive = (Read-NSPMenuChoice -Prompt 'Is this parameter sensitive? [Y/N]' -Allowed @('Y','N') -Default 'Y') -eq 'Y'
-                $description = Read-Host 'Parameter explanation (do not enter its value)'
-                $runtimeParameters[$parameterName] = [ordered]@{
-                    Name        = $parameterName
-                    Sensitive   = $isSensitive
-                    Description = $description
+
+            # Reconcile this manual capture against the background timeline: flip the most
+            # recent matching auto-detected entry to manual instead of double-logging it.
+            $lastTimelineEntry = if ($captureState.Timeline.Count -gt 0) { $captureState.Timeline[$captureState.Timeline.Count - 1] } else { $null }
+            if ($lastTimelineEntry -and $lastTimelineEntry.WindowTitle -eq $observation.WindowTitle -and -not $lastTimelineEntry.IsManualCapture) {
+                $lastTimelineEntry.IsManualCapture = $true
+            } else {
+                $captureState.Timeline.Add([ordered]@{
+                    AtUtc           = (Get-Date).ToUniversalTime().ToString('o')
+                    WindowTitle     = $observation.WindowTitle
+                    IsManualCapture = $true
+                })
+            }
+
+            Write-Host ''
+            Write-Host ("=== Observation {0}: {1} ===" -f ($steps.Count + 1), $observation.WindowTitle) -ForegroundColor Yellow
+            Write-Host ("Focused control: {0} [{1}]  AutomationId: {2}" -f $observation.ControlName, $observation.ControlType, $observation.AutomationId) -ForegroundColor Gray
+            Write-Host 'What should the automation do on this screen? (You are describing it now, while it is still on screen.)' -ForegroundColor Cyan
+            Write-Host '[1] Click a button/control        [2] Set a text value       [3] Select an option (list/combo/radio)'
+            Write-Host '[4] Send literal keystrokes        [5] Wait for a window to appear       [6] Wait for a window to close'
+            Write-Host '[7] Skip - do not record this observation as an automation step'
+            $actionChoice = Read-NSPMenuChoice -Prompt 'Action' -Allowed @('1','2','3','4','5','6','7') -Default '1'
+            if ($actionChoice -eq '7') {
+                Write-Host 'Skipped. Switch back to the installer and press Ctrl+Shift+F12 for the next screen, or Ctrl+Shift+F11 when done.' -ForegroundColor DarkGray
+                continue
+            }
+
+            $action = @{
+                '1' = 'Click'; '2' = 'SetValue'; '3' = 'Select'; '4' = 'SendKeys'
+                '5' = 'WaitForWindow'; '6' = 'WaitForWindowClose'
+            }[$actionChoice]
+
+            Write-Host 'How should the runner recognize this window later? Its title text is matched at runtime.' -ForegroundColor DarkGray
+            $expectedText = Read-Host ("Expected visible window text (Enter accepts '{0}')" -f $observation.WindowTitle)
+            if ([string]::IsNullOrWhiteSpace($expectedText)) { $expectedText = $observation.WindowTitle }
+            Write-Host 'Contains = the title only needs to include this text (safer if it varies, e.g. a version number). Exact = the title must match exactly.' -ForegroundColor DarkGray
+            $matchChoice = Read-NSPMenuChoice -Prompt 'Window matching: [1] Contains  [2] Exact' -Allowed @('1','2') -Default '1'
+            $timeoutText = Read-Host 'How long should the runner wait for this window before giving up, in seconds (Enter accepts 60)'
+            $timeoutSeconds = 60
+            if ($timeoutText -and (-not [int]::TryParse($timeoutText, [ref]$timeoutSeconds) -or $timeoutSeconds -lt 1)) {
+                throw "Invalid timeout: $timeoutText"
+            }
+            Write-Host 'Answer Y only if this screen sometimes does not appear at all (e.g. an optional driver prompt).' -ForegroundColor DarkGray
+            $optional = (Read-NSPMenuChoice -Prompt 'May this screen be absent? [Y/N]' -Allowed @('Y','N') -Default 'N') -eq 'Y'
+
+            $valueDefinition = $null
+            if ($action -in @('SetValue','Select','SendKeys')) {
+                Write-Host 'A literal value is committed to this file in plain text - use it only for non-sensitive, non-client-specific values (e.g. "Next").' -ForegroundColor DarkGray
+                Write-Host 'A runtime parameter is filled in later, at execution time, and is never written here - always use it for secrets, license keys, or client-specific values.' -ForegroundColor DarkGray
+                Write-Host '[1] Safe literal value  [2] Runtime parameter (required for secrets/client values)'
+                $valueChoice = Read-NSPMenuChoice -Prompt 'Value source' -Allowed @('1','2') -Default '2'
+                if ($valueChoice -eq '1') {
+                    $literalValue = Read-Host 'Non-sensitive literal value'
+                    $valueDefinition = [ordered]@{ Source = 'Literal'; Value = $literalValue }
                 }
-                $valueDefinition = [ordered]@{ Source = 'RuntimeParameter'; Name = $parameterName }
+                else {
+                    do { $parameterName = Read-Host 'Runtime parameter name (for example LicenseKey)' }
+                    while ($parameterName -notmatch '^[A-Za-z][A-Za-z0-9_]*$')
+                    $isSensitive = (Read-NSPMenuChoice -Prompt 'Is this parameter sensitive? [Y/N]' -Allowed @('Y','N') -Default 'Y') -eq 'Y'
+                    $description = Read-Host 'Parameter explanation (do not enter its value)'
+                    $runtimeParameters[$parameterName] = [ordered]@{
+                        Name        = $parameterName
+                        Sensitive   = $isSensitive
+                        Description = $description
+                    }
+                    $valueDefinition = [ordered]@{ Source = 'RuntimeParameter'; Name = $parameterName }
+                }
             }
-        }
 
-        $step = [ordered]@{
-            Order  = $steps.Count + 1
-            Window = [ordered]@{
-                Title     = $observation.WindowTitle
-                Text      = $expectedText
-                MatchMode = if ($matchChoice -eq '2') { 'Exact' } else { 'Contains' }
+            $step = [ordered]@{
+                Order  = $steps.Count + 1
+                Window = [ordered]@{
+                    Title     = $observation.WindowTitle
+                    Text      = $expectedText
+                    MatchMode = if ($matchChoice -eq '2') { 'Exact' } else { 'Contains' }
+                }
+                Control = [ordered]@{
+                    Name           = $observation.ControlName
+                    AutomationId   = $observation.AutomationId
+                    ControlType    = $observation.ControlType
+                    AutoItSelector = ''
+                }
+                Action         = $action
+                Value          = $valueDefinition
+                TimeoutSeconds = $timeoutSeconds
+                Optional       = $optional
+                Note           = Read-Host 'Optional explanation for the implementing technician'
             }
-            Control = [ordered]@{
-                Name           = $observation.ControlName
-                AutomationId   = $observation.AutomationId
-                ControlType    = $observation.ControlType
-                AutoItSelector = ''
-            }
-            Action         = $action
-            Value          = $valueDefinition
-            TimeoutSeconds = $timeoutSeconds
-            Optional       = $optional
-            Note           = Read-Host 'Optional explanation for the implementing technician'
+            $steps.Add([pscustomobject]$step)
+            Write-Host ("Step {0} recorded." -f $step.Order) -ForegroundColor Green
+            Write-Host 'Switch back to the installer and press Ctrl+Shift+F12 for the next screen, or Ctrl+Shift+F11 when done.' -ForegroundColor DarkGray
         }
-        $steps.Add([pscustomobject]$step)
+    } finally {
+        $pollTimer.Stop()
+        Unregister-Event -SourceIdentifier $pollSubscription.Name -ErrorAction SilentlyContinue
+        Remove-Job -Name $pollSubscription.Name -Force -ErrorAction SilentlyContinue
+        $pollTimer.Dispose()
+    }
+
+    if ($steps.Count -eq 0) {
+        Write-Warning 'No automation steps were recorded. No capture file was written.'
+        return
     }
 
     $capture = [ordered]@{
-        SchemaVersion    = '2.0'
-        Installer        = [ordered]@{
+        SchemaVersion      = '2.0'
+        Installer          = [ordered]@{
             File            = [IO.Path]::GetFileName($resolvedInstaller)
             Sha256          = (Get-FileHash -LiteralPath $resolvedInstaller -Algorithm SHA256).Hash
             FileVersion     = $version.FileVersion
@@ -237,16 +292,18 @@ public static class NSPInstallerCaptureNative {
             SignerSubject   = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { $null }
             SignatureStatus = $signature.Status.ToString()
         }
-        CapturedAtUtc    = (Get-Date).ToUniversalTime().ToString('o')
-        CaptureProcessId = $installerProcess.Id
-        ExecutionEngine = 'AutoIt'
-        RuntimeParameters = @($runtimeParameters.Values)
-        Steps             = @($steps)
+        CapturedAtUtc      = (Get-Date).ToUniversalTime().ToString('o')
+        CaptureProcessId   = $installerProcess.Id
+        ExecutionEngine    = 'AutoIt'
+        RuntimeParameters  = @($runtimeParameters.Values)
+        Steps              = @($steps)
+        WindowTitleTimeline = @($captureState.Timeline)
     }
 
     $parent = Split-Path -Path $OutputPath -Parent
     if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
     $capture | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
     Write-Host ("Capture written to {0}" -f $OutputPath) -ForegroundColor Green
+    Write-Host ("{0} automation step(s), {1} background window title(s) observed." -f $steps.Count, $captureState.Timeline.Count) -ForegroundColor DarkGray
     Get-Item -LiteralPath $OutputPath
 }

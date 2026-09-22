@@ -15,7 +15,9 @@ function Get-NSPIntuneAppInventory {
     # string as a new consent and reprompts even mid-session, so using one shared scope
     # across the whole deployment flow is what lets a single login cover all of it.
     $scope = 'DeviceManagementApps.ReadWrite.All'
-    $context = Connect-NSPGraph -Scopes $scope -Connect:$Connect
+    $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+    $registration = if (Test-Path -LiteralPath $registrationPath) { Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json } else { $null }
+    $context = Connect-NSPGraph -Scopes $scope -Connect:$Connect -ClientId ([string]$registration.ClientId) -TenantId ([string]$registration.TenantId)
 
     $uri = "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps?`$filter=isof('microsoft.graph.win32LobApp')&`$select=id,displayName,publisher,notes,lastModifiedDateTime,publishingState,microsoft.graph.win32LobApp/committedContentVersion"
     $apps = @(Invoke-NSPGraphCollection -Uri $uri | ForEach-Object {

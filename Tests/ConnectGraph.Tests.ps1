@@ -41,4 +41,32 @@ Describe 'Connect-NSPGraph' {
             }
         }
     }
+
+    Context 'connecting with a registered app instead of the SDK default' {
+        It 'passes ClientId and TenantId through to Connect-MgGraph when provided' {
+            InModuleScope NSP.IntuneApps {
+                Mock Connect-MgGraph { } -ModuleName NSP.IntuneApps
+                function Get-MgContext { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com'; Scopes = @('DeviceManagementApps.Read.All') } }
+
+                Connect-NSPGraph -Scopes 'DeviceManagementApps.Read.All' -Connect -ClientId 'client-1' -TenantId 'tenant-1' | Out-Null
+
+                Should -Invoke Connect-MgGraph -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+                    $ClientId -eq 'client-1' -and $TenantId -eq 'tenant-1'
+                }
+            }
+        }
+
+        It 'omits ClientId and TenantId when not provided, falling back to the SDK default app' {
+            InModuleScope NSP.IntuneApps {
+                Mock Connect-MgGraph { } -ModuleName NSP.IntuneApps
+                function Get-MgContext { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com'; Scopes = @('DeviceManagementApps.Read.All') } }
+
+                Connect-NSPGraph -Scopes 'DeviceManagementApps.Read.All' -Connect | Out-Null
+
+                Should -Invoke Connect-MgGraph -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+                    $null -eq $ClientId -and $null -eq $TenantId
+                }
+            }
+        }
+    }
 }
