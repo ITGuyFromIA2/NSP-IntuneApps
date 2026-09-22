@@ -58,9 +58,20 @@ Two real defects surfaced only by the live run, both now fixed: `Get-NSPIntuneAp
 
 `UpdateMetadataInPlace` and `CreateSupersedingApp` (`PatchMetadata`, `AddSupersedence`) remain not yet implemented.
 
-### Not yet implemented: assignment management
+### Assignment management (V1: AND-chain filters only)
 
-No path in this document creates or modifies an app assignment - that remains a deliberately separate, reviewed operation (the `AssignmentColl` preflight rule already blocks embedded targeting in app settings). `Get-NSPIntuneAppAssignmentInventory` is the first, read-only piece of closing that gap: it harvests every Win32 app's current assignments (group, intent, and any assignment filter) plus every assignment filter defined in the tenant, so a future assignment/filter-builder tool can offer groups and filters already in real use as a picklist instead of hand-typed object IDs. It makes no tenant changes. The write side (creating a group- or filter-scoped assignment, and a guided filter-rule builder) is designed but not yet built.
+No path elsewhere in this document creates or modifies an app assignment - assignment is a deliberately separate, reviewed operation (the `AssignmentColl` preflight rule already blocks embedded targeting in app settings). This is now implemented as its own family of tools:
+
+- `Get-NSPIntuneAppAssignmentInventory` (read-only): harvests every Win32 app's current assignments (group, intent, any filter) plus every assignment filter defined in the tenant, so groups/filters already in real use can be picked instead of hand-typed object IDs. Assignment filters need the `beta` Graph endpoint, not `v1.0` (`v1.0` returns "Resource not found for the segment 'assignmentFilters'").
+- `Find-NSPIntuneGroup` (read-only): live substring search across every tenant group (`$filter=contains(displayName,...)` with `ConsistencyLevel: eventual`), for picking a group that was never previously used for an assignment - the harvested list above only covers groups already in use.
+- `Get-NSPIntuneEnrollmentProfileNames` (read-only): Windows Autopilot deployment profile names, for a picklist when a filter clause targets `device.enrollmentProfileName` instead of hand-typing a profile name. Android/Apple enrollment profile sources are a separate Graph surface and are not yet covered.
+- `Build-NSPAssignmentFilterRule` (private, pure/offline): assembles one or more clauses (`Property`, `Operator`, `Value`) into a valid Intune filter rule string, joined with `and`. **V1 scope is AND-chains only** - real tenant filters can mix `and`/`or` with explicit parenthesized grouping (e.g. Android enrollment-profile filters routinely do), which this does not yet build; that's a planned, not accidental, gap.
+- `New-NSPIntuneAssignmentFilter`: creates a filter from `-Clauses` (via the builder above) or a hand-authored `-Rule` string, plan-only by default.
+- `New-NSPIntuneWin32AppAssignment`: assigns an app to a group (Include/Exclude, with intent), optionally scoped by an existing filter (Intune does not allow filters on Exclude assignments). Wraps `IntuneWin32App`'s `Add-IntuneWin32AppAssignmentGroup`, plan-only by default.
+
+Registering an app for the first time now also requests `DeviceManagementServiceConfig.ReadWrite.All` (needed for the enrollment-profile lookup); `Register-NSPIntuneWin32AppRegistration` self-repairs an existing registration's admin consent the same way it already self-repairs the broker redirect URI - `NeedsPermissionRepair`/`PermissionsRepaired` alongside `NeedsRedirectUriRepair`/`RedirectUriRepaired`.
+
+The dashboard exposes this as `[13]` (save the assignment/filter inventory), `[14]` (assign an app to a group, with the group picked from the harvested "already used" list or a live wildcard search, and an optional existing filter), and `[15]` (a guided clause-by-clause filter builder, with the enrollment-profile picklist above wired in for that one property).
 
 `Start-NSPIntuneApps.ps1`'s dashboard exposes stage advancement as "Advance the next stage of a saved run" (`[10]`): it always previews the next app/stage first, then offers execute-one-stage, auto-advance-every-remaining-stage (no per-stage confirm — clearly labeled for test-tenant use, since it still performs real tenant writes), or cancel. `[6]`'s tracker builder shows a numbered catalog picker so a batch can be built by number as well as by name. `[11]` exposes `Register-NSPIntuneWin32AppRegistration` directly from the dashboard.
 

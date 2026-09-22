@@ -10,6 +10,7 @@ Describe 'Register-NSPIntuneWin32AppRegistration' {
                     [pscustomobject]@{ Value = 'DeviceManagementConfiguration.ReadWrite.All'; Id = 'scope-2' }
                     [pscustomobject]@{ Value = 'DeviceManagementRBAC.Read.All'; Id = 'scope-3' }
                     [pscustomobject]@{ Value = 'Group.Read.All'; Id = 'scope-4' }
+                    [pscustomobject]@{ Value = 'DeviceManagementServiceConfig.ReadWrite.All'; Id = 'scope-5' }
                 )
             }
         }
@@ -55,8 +56,14 @@ Describe 'Register-NSPIntuneWin32AppRegistration' {
         Mock Get-MgApplication {
             [pscustomobject]@{ Id = 'existing-object-id'; AppId = 'existing-app-id'; PublicClient = [pscustomobject]@{ RedirectUris = @('http://localhost', 'ms-appx-web://Microsoft.AAD.BrokerPlugin/existing-app-id') } }
         } -ModuleName NSP.IntuneApps
+        Mock Get-MgServicePrincipal { New-FixtureGraphServicePrincipal } -ModuleName NSP.IntuneApps
+        Mock Get-MgOauth2PermissionGrant {
+            [pscustomobject]@{ Id = 'grant-id'; Scope = 'DeviceManagementApps.ReadWrite.All DeviceManagementConfiguration.ReadWrite.All DeviceManagementRBAC.Read.All Group.Read.All DeviceManagementServiceConfig.ReadWrite.All' }
+        } -ModuleName NSP.IntuneApps
         Mock New-MgApplication { throw 'should not be called' } -ModuleName NSP.IntuneApps
         Mock Update-MgApplication { throw 'should not be called' } -ModuleName NSP.IntuneApps
+        Mock Update-MgOauth2PermissionGrant { throw 'should not be called' } -ModuleName NSP.IntuneApps
+        Mock New-MgOauth2PermissionGrant { throw 'should not be called' } -ModuleName NSP.IntuneApps
 
         $repoRoot = Join-Path $TestDrive 'already-registered'
         $configDir = Join-Path $repoRoot 'Config\Local'
@@ -113,6 +120,58 @@ Describe 'Register-NSPIntuneWin32AppRegistration' {
         $result.Status | Should -Be 'RedirectUriRepaired'
         Should -Invoke Update-MgApplication -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
             $ApplicationId -eq 'existing-object-id' -and $PublicClient.RedirectUris -contains 'ms-appx-web://Microsoft.AAD.BrokerPlugin/existing-app-id' -and $PublicClient.RedirectUris -contains 'http://localhost'
+        }
+    }
+
+    It 'reports that admin consent needs repair without -Execute' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Get-MgApplication {
+            [pscustomobject]@{ Id = 'existing-object-id'; AppId = 'existing-app-id'; PublicClient = [pscustomobject]@{ RedirectUris = @('http://localhost', 'ms-appx-web://Microsoft.AAD.BrokerPlugin/existing-app-id') } }
+        } -ModuleName NSP.IntuneApps
+        Mock Get-MgServicePrincipal { New-FixtureGraphServicePrincipal } -ModuleName NSP.IntuneApps
+        Mock Get-MgOauth2PermissionGrant {
+            [pscustomobject]@{ Id = 'grant-id'; Scope = 'DeviceManagementApps.ReadWrite.All DeviceManagementConfiguration.ReadWrite.All DeviceManagementRBAC.Read.All Group.Read.All' }
+        } -ModuleName NSP.IntuneApps
+        Mock Update-MgOauth2PermissionGrant { throw 'should not be called' } -ModuleName NSP.IntuneApps
+
+        $repoRoot = Join-Path $TestDrive 'needs-permission-repair-planonly'
+        $configDir = Join-Path $repoRoot 'Config\Local'
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+        [ordered]@{
+            TenantId = 'tenant-1'; ClientId = 'existing-app-id'; AppName = 'NSP-IntuneApps-Win32AppDeployment'
+            CreatedAtUtc = (Get-Date).ToString('o'); GrantedScopes = @('DeviceManagementApps.ReadWrite.All')
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $configDir 'GraphAppRegistration.json') -Encoding UTF8
+
+        $result = Register-NSPIntuneWin32AppRegistration -RepoRoot $repoRoot -TenantId 'tenant-1'
+        $result.Status | Should -Be 'NeedsPermissionRepair'
+        $result.Message | Should -Match 'DeviceManagementServiceConfig.ReadWrite.All'
+        Should -Invoke Update-MgOauth2PermissionGrant -Times 0 -ModuleName NSP.IntuneApps
+    }
+
+    It 'grants missing admin consent when -Execute is passed' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Get-MgApplication {
+            [pscustomobject]@{ Id = 'existing-object-id'; AppId = 'existing-app-id'; PublicClient = [pscustomobject]@{ RedirectUris = @('http://localhost', 'ms-appx-web://Microsoft.AAD.BrokerPlugin/existing-app-id') } }
+        } -ModuleName NSP.IntuneApps
+        Mock Get-MgServicePrincipal { New-FixtureGraphServicePrincipal } -ModuleName NSP.IntuneApps
+        Mock Get-MgOauth2PermissionGrant {
+            [pscustomobject]@{ Id = 'grant-id'; Scope = 'DeviceManagementApps.ReadWrite.All DeviceManagementConfiguration.ReadWrite.All DeviceManagementRBAC.Read.All Group.Read.All' }
+        } -ModuleName NSP.IntuneApps
+        Mock Update-MgOauth2PermissionGrant { } -ModuleName NSP.IntuneApps
+        Mock New-MgOauth2PermissionGrant { throw 'should not be called' } -ModuleName NSP.IntuneApps
+
+        $repoRoot = Join-Path $TestDrive 'needs-permission-repair-execute'
+        $configDir = Join-Path $repoRoot 'Config\Local'
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+        [ordered]@{
+            TenantId = 'tenant-1'; ClientId = 'existing-app-id'; AppName = 'NSP-IntuneApps-Win32AppDeployment'
+            CreatedAtUtc = (Get-Date).ToString('o'); GrantedScopes = @('DeviceManagementApps.ReadWrite.All')
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $configDir 'GraphAppRegistration.json') -Encoding UTF8
+
+        $result = Register-NSPIntuneWin32AppRegistration -RepoRoot $repoRoot -TenantId 'tenant-1' -Execute -Confirm:$false
+        $result.Status | Should -Be 'PermissionsRepaired'
+        Should -Invoke Update-MgOauth2PermissionGrant -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $OAuth2PermissionGrantId -eq 'grant-id' -and $BodyParameter.Scope -match 'DeviceManagementServiceConfig.ReadWrite.All'
         }
     }
 

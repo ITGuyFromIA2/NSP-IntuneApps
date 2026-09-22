@@ -46,6 +46,10 @@
         'Set-NSPAppManagementNotes'
         'Remove-NSPIntuneWin32App'
         'Get-NSPIntuneAppAssignmentInventory'
+        'New-NSPIntuneWin32AppAssignment'
+        'New-NSPIntuneAssignmentFilter'
+        'Find-NSPIntuneGroup'
+        'Get-NSPIntuneEnrollmentProfileNames'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()

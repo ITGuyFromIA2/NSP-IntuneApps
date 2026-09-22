@@ -30,6 +30,7 @@ function Register-NSPIntuneWin32AppRegistration {
         'DeviceManagementConfiguration.ReadWrite.All'
         'DeviceManagementRBAC.Read.All'
         'Group.Read.All'
+        'DeviceManagementServiceConfig.ReadWrite.All'
     )
     $recordPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
 
@@ -87,6 +88,52 @@ function Register-NSPIntuneWin32AppRegistration {
                     AppName      = [string]$record.AppName
                     RecordPath   = $recordPath
                     Message      = 'Added the Windows broker redirect URI. Sign-in should now succeed.'
+                }
+            }
+
+            # Permission requirements grow over time (e.g. adding enrollment-profile lookups
+            # needed DeviceManagementServiceConfig.ReadWrite.All after this app was already
+            # registered). Compare the existing admin-consent grant's scope string against the
+            # current required list and top it up rather than requiring a full re-registration.
+            $graphServicePrincipalForRepair = Get-MgServicePrincipal -Filter "appId eq '$graphAppId'" | Select-Object -First 1
+            $existingGrant = if ($graphServicePrincipalForRepair) {
+                Get-MgOauth2PermissionGrant -Filter "clientId eq '$($existingApp[0].Id)' and resourceId eq '$($graphServicePrincipalForRepair.Id)' and consentType eq 'AllPrincipals'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            } else { $null }
+            $grantedScopeNames = if ($existingGrant) { @([string]$existingGrant.Scope -split '\s+' | Where-Object { $_ }) } else { @() }
+            $missingPermissionNames = @($requiredPermissionNames | Where-Object { $_ -notin $grantedScopeNames })
+
+            if (@($missingPermissionNames).Count -gt 0) {
+                if (-not $Execute) {
+                    return [pscustomobject]@{
+                        Status       = 'NeedsPermissionRepair'
+                        TenantId     = [string]$record.TenantId
+                        TenantDomain = $tenantDomain
+                        ClientId     = [string]$record.ClientId
+                        AppName      = [string]$record.AppName
+                        RecordPath   = $recordPath
+                        Message      = "This registration is missing admin consent for: $($missingPermissionNames -join ', '). Run again with -Execute to grant it."
+                    }
+                }
+                if (-not $PSCmdlet.ShouldProcess("tenant $($context.TenantId)", "Grant admin consent for $($missingPermissionNames -join ', ') on app registration '$($record.AppName)'")) { return }
+                $mergedScope = (@($grantedScopeNames) + $missingPermissionNames | Select-Object -Unique) -join ' '
+                if ($existingGrant) {
+                    Update-MgOauth2PermissionGrant -OAuth2PermissionGrantId $existingGrant.Id -BodyParameter @{ Scope = $mergedScope } -ErrorAction Stop | Out-Null
+                } else {
+                    New-MgOauth2PermissionGrant -BodyParameter @{
+                        ClientId    = $existingApp[0].Id
+                        ConsentType = 'AllPrincipals'
+                        ResourceId  = $graphServicePrincipalForRepair.Id
+                        Scope       = $mergedScope
+                    } -ErrorAction Stop | Out-Null
+                }
+                return [pscustomobject]@{
+                    Status       = 'PermissionsRepaired'
+                    TenantId     = [string]$record.TenantId
+                    TenantDomain = $tenantDomain
+                    ClientId     = [string]$record.ClientId
+                    AppName      = [string]$record.AppName
+                    RecordPath   = $recordPath
+                    Message      = "Granted admin consent for: $($missingPermissionNames -join ', ')."
                 }
             }
 
