@@ -58,6 +58,10 @@ Two real defects surfaced only by the live run, both now fixed: `Get-NSPIntuneAp
 
 `UpdateMetadataInPlace` and `CreateSupersedingApp` (`PatchMetadata`, `AddSupersedence`) remain not yet implemented.
 
+### Not yet implemented: assignment management
+
+No path in this document creates or modifies an app assignment - that remains a deliberately separate, reviewed operation (the `AssignmentColl` preflight rule already blocks embedded targeting in app settings). `Get-NSPIntuneAppAssignmentInventory` is the first, read-only piece of closing that gap: it harvests every Win32 app's current assignments (group, intent, and any assignment filter) plus every assignment filter defined in the tenant, so a future assignment/filter-builder tool can offer groups and filters already in real use as a picklist instead of hand-typed object IDs. It makes no tenant changes. The write side (creating a group- or filter-scoped assignment, and a guided filter-rule builder) is designed but not yet built.
+
 `Start-NSPIntuneApps.ps1`'s dashboard exposes stage advancement as "Advance the next stage of a saved run" (`[10]`): it always previews the next app/stage first, then offers execute-one-stage, auto-advance-every-remaining-stage (no per-stage confirm — clearly labeled for test-tenant use, since it still performs real tenant writes), or cancel. `[6]`'s tracker builder shows a numbered catalog picker so a batch can be built by number as well as by name. `[11]` exposes `Register-NSPIntuneWin32AppRegistration` directly from the dashboard.
 
 ### Reducing sign-ins further: reusing the registered app

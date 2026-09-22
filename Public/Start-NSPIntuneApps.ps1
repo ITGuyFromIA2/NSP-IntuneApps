@@ -46,9 +46,10 @@ function Start-NSPIntuneApps {
         Write-Host '--- Tenant administration ---' -ForegroundColor DarkCyan
         Write-Host '  [11] Register/verify the tenant app registration (one-time bootstrap)'
         Write-Host '  [12] Delete an existing Intune app (irreversible)' -ForegroundColor Red
+        Write-Host '  [13] Save a read-only app assignment and filter inventory'
         Write-Host ''
         Write-Host '  [Q] Quit'
-        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','11','12','Q')
+        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','11','12','13','Q')
 
         switch ($choice) {
             '1' {
@@ -299,6 +300,20 @@ function Start-NSPIntuneApps {
                         }
                     }
                 }
+            }
+            '13' {
+                Write-Host 'A delegated browser login may open. This reads every Win32 app''s current assignments and every assignment filter in the tenant - no tenant data is changed.' -ForegroundColor Yellow
+                $inventory = Get-NSPIntuneAppAssignmentInventory -RepoRoot $RepoRoot -Connect
+                $inventory | Select-Object TenantId, Account, AppCount, AssignmentCount, FilterCount, OutputPath | Format-List
+                if (@($inventory.Filters).Count -gt 0) {
+                    Write-Host 'Existing assignment filters:' -ForegroundColor Cyan
+                    $inventory.Filters | Format-Table DisplayName, Platform, Rule -Wrap
+                }
+                if (@($inventory.DistinctGroups).Count -gt 0) {
+                    Write-Host 'Groups already used for assignment:' -ForegroundColor Cyan
+                    $inventory.DistinctGroups | Format-Table GroupDisplayName, GroupId -AutoSize
+                }
+                Write-Host 'This was read-only.' -ForegroundColor DarkGray
             }
         }
         if ($choice -ne 'Q') { Read-Host 'Press Enter to return to the dashboard' | Out-Null }
