@@ -13,7 +13,7 @@ function Get-NSPIntuneAppInventory {
     $scope = 'DeviceManagementApps.Read.All'
     $context = Connect-NSPGraph -Scopes $scope -Connect:$Connect
 
-    $uri = "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps?`$filter=isof('microsoft.graph.win32LobApp')&`$select=id,displayName,publisher,notes,committedContentVersion,lastModifiedDateTime,publishingState"
+    $uri = "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps?`$filter=isof('microsoft.graph.win32LobApp')&`$select=id,displayName,publisher,notes,lastModifiedDateTime,publishingState,microsoft.graph.win32LobApp/committedContentVersion"
     $apps = @(Invoke-NSPGraphCollection -Uri $uri | ForEach-Object {
         [ordered]@{
             Id=[string]$_.id
