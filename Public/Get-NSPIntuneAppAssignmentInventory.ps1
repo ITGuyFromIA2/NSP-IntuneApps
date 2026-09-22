@@ -30,7 +30,7 @@ function Get-NSPIntuneAppAssignmentInventory {
     $filtersUri = 'https://graph.microsoft.com/beta/deviceManagement/assignmentFilters'
     $filters = @(Invoke-NSPGraphCollection -Uri $filtersUri | ForEach-Object {
         $filterCache[[string]$_.id] = [string]$_.displayName
-        [ordered]@{
+        [pscustomobject][ordered]@{
             Id          = [string]$_.id
             DisplayName = [string]$_.displayName
             Platform    = [string]$_.platform
