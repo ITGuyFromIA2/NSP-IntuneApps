@@ -253,8 +253,9 @@ function Start-NSPIntuneApps {
                 Write-Host 'This is a one-time, tenant-wide bootstrap and requires a Global/Privileged Role Administrator account.' -ForegroundColor Yellow
                 $preview = Register-NSPIntuneWin32AppRegistration -RepoRoot $RepoRoot
                 $preview | Format-List
-                if ($preview.Status -eq 'PlanOnly') {
-                    $executeChoice = Read-NSPMenuChoice -Prompt 'Create the app registration and grant admin consent now? [Y/N]' -Allowed @('Y','N') -Default 'N'
+                if ($preview.Status -in @('PlanOnly', 'NeedsRedirectUriRepair')) {
+                    $actionLabel = if ($preview.Status -eq 'NeedsRedirectUriRepair') { 'Repair the broker redirect URI now' } else { 'Create the app registration and grant admin consent now' }
+                    $executeChoice = Read-NSPMenuChoice -Prompt "$actionLabel? [Y/N]" -Allowed @('Y','N') -Default 'N'
                     if ($executeChoice -eq 'Y') {
                         $result = Register-NSPIntuneWin32AppRegistration -RepoRoot $RepoRoot -Execute -Confirm:$false
                         $result | Format-List

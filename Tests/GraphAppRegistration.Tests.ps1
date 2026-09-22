@@ -89,7 +89,7 @@ Describe 'Register-NSPIntuneWin32AppRegistration' {
         } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $configDir 'GraphAppRegistration.json') -Encoding UTF8
 
         $result = Register-NSPIntuneWin32AppRegistration -RepoRoot $repoRoot -TenantId 'tenant-1'
-        $result.Status | Should -Be 'AlreadyRegistered'
+        $result.Status | Should -Be 'NeedsRedirectUriRepair'
         $result.Message | Should -Match 'AADSTS50011'
         Should -Invoke Update-MgApplication -Times 0 -ModuleName NSP.IntuneApps
     }
