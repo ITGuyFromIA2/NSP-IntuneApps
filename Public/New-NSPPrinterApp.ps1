@@ -76,7 +76,7 @@ function New-NSPPrinterApp {
     }
     if ([string]::IsNullOrWhiteSpace($Name)) { throw 'Name is required.' }
     if ([string]::IsNullOrWhiteSpace($DriverName)) { throw 'DriverName is required and must exactly match the Windows printer-driver name.' }
-    if (-not $OutputRoot) { $OutputRoot = Join-Path $RepoRoot 'Config\Local\GeneratedApps' }
+    if (-not $OutputRoot) { $OutputRoot = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { Join-Path $RepoRoot 'Config\Local\GeneratedApps' } else { Join-Path $RepoRoot 'Apps' } }
 
     if ($Mode -eq 'Driver') {
         if ([string]::IsNullOrWhiteSpace($InfRelativePath)) { throw 'InfRelativePath is required for a driver app.' }

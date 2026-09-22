@@ -52,7 +52,7 @@ function New-NSPShortcutApp {
         $Target = $targetUri.AbsoluteUri
     }
     if (-not $Description) { $Description = if ($Mode -like 'Web*') { "Opens $Target" } else { "Opens $Target" } }
-    if (-not $OutputRoot) { $OutputRoot = Join-Path $RepoRoot 'Config\Local\GeneratedApps' }
+    if (-not $OutputRoot) { $OutputRoot = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { Join-Path $RepoRoot 'Config\Local\GeneratedApps' } else { Join-Path $RepoRoot 'Apps' } }
 
     $safeName = ($Name -replace '[^A-Za-z0-9_-]', '')
     if (-not $safeName) { throw 'Name did not contain any filename-safe characters.' }

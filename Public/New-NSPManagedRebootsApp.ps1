@@ -25,7 +25,7 @@ function New-NSPManagedRebootsApp {
         $value = Read-Host "5. Evaluation interval in minutes [$EvaluationIntervalMinutes]"; if ($value) { $EvaluationIntervalMinutes = [int]$value }
         $value = Read-Host "6. Final reboot countdown in seconds [$RebootCountdownSeconds]"; if ($value) { $RebootCountdownSeconds = [int]$value }
     }
-    if (-not $OutputRoot) { $OutputRoot = Join-Path $RepoRoot 'Config\Local\GeneratedApps' }
+    if (-not $OutputRoot) { $OutputRoot = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { Join-Path $RepoRoot 'Config\Local\GeneratedApps' } else { Join-Path $RepoRoot 'Apps' } }
     $id = 'ManagedReboots'
     $appRoot = Join-Path $OutputRoot $id
     if ((Test-Path -LiteralPath $appRoot) -and -not $Force) { throw "Destination already exists: $appRoot. Use -Force to replace generated files." }

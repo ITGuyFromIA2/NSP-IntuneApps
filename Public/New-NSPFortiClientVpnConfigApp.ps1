@@ -3,8 +3,9 @@ function New-NSPFortiClientVpnConfigApp {
     .SYNOPSIS
         Generates a client-specific FortiClient SSL VPN configuration app.
     .DESCRIPTION
-        Keeps the upstream catalog generic by writing configured output to the ignored local
-        generation area unless OutputRoot is explicitly supplied.
+        Defaults to Apps\ (deployable) unless run from the public upstream repo itself, where
+        it writes to the ignored local generation area instead so client-specific values never
+        reach that catalog. Pass -OutputRoot explicitly to override either default.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param(
@@ -46,7 +47,7 @@ function New-NSPFortiClientVpnConfigApp {
     if (-not $serverUri.IsAbsoluteUri -or $serverUri.Scheme -ne 'https' -or [string]::IsNullOrWhiteSpace($serverUri.Host)) {
         throw 'Server must be an absolute HTTPS URL, such as https://vpn.example.com:8443.'
     }
-    if (-not $OutputRoot) { $OutputRoot = Join-Path $RepoRoot 'Config\Local\GeneratedApps' }
+    if (-not $OutputRoot) { $OutputRoot = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { Join-Path $RepoRoot 'Config\Local\GeneratedApps' } else { Join-Path $RepoRoot 'Apps' } }
 
     $safeName = ($TunnelName -replace '[^A-Za-z0-9_-]', '')
     if ([string]::IsNullOrWhiteSpace($safeName)) { throw 'TunnelName did not contain any filename-safe characters.' }

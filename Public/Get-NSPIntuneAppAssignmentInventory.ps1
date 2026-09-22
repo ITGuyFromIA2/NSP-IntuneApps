@@ -24,7 +24,10 @@ function Get-NSPIntuneAppAssignmentInventory {
     $apps = @(Invoke-NSPGraphCollection -Uri $appsUri)
 
     $filterCache = @{}
-    $filtersUri = 'https://graph.microsoft.com/v1.0/deviceManagement/assignmentFilters'
+    # Assignment filters are not exposed at v1.0 for every tenant yet ("Resource not found for
+    # the segment 'assignmentFilters'"); beta is the reliable endpoint, matching how
+    # Publish-NSPCodeSigningTrust already uses beta for device configuration profiles.
+    $filtersUri = 'https://graph.microsoft.com/beta/deviceManagement/assignmentFilters'
     $filters = @(Invoke-NSPGraphCollection -Uri $filtersUri | ForEach-Object {
         $filterCache[[string]$_.id] = [string]$_.displayName
         [ordered]@{

@@ -26,15 +26,16 @@ function New-NSPDriveMapApp {
         Write-Host 'Example path: \\files.contoso.com\Accounting'
         if (-not $Path) { $Path = Read-Host '3. UNC path' }
         if (-not $OutputRoot) {
-            Write-Host 'Upstream-safe default: Config\Local\GeneratedApps (ignored by Git)'
-            $enteredRoot = Read-Host '4. Output folder [press Enter for the safe default]'
+            $defaultHint = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { 'Config\Local\GeneratedApps (ignored by Git - this is the public upstream repo)' } else { 'Apps (this repo is not the public upstream, so it is deployable by default)' }
+            Write-Host "Default output folder: $defaultHint"
+            $enteredRoot = Read-Host '4. Output folder [press Enter for the default]'
             if ($enteredRoot) { $OutputRoot = $enteredRoot }
         }
     }
     if ([string]::IsNullOrWhiteSpace($Name)) { throw 'Name is required.' }
     if ($DriveLetter -notmatch '^[A-Za-z]$') { throw 'DriveLetter must be one letter, such as S.' }
     if ($Path -notmatch '^\\\\[^\\]+\\[^\\]+') { throw 'Path must be a UNC path, such as \\server\share.' }
-    if (-not $OutputRoot) { $OutputRoot = Join-Path $RepoRoot 'Config\Local\GeneratedApps' }
+    if (-not $OutputRoot) { $OutputRoot = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { Join-Path $RepoRoot 'Config\Local\GeneratedApps' } else { Join-Path $RepoRoot 'Apps' } }
 
     $safeName = ($Name -replace '[^A-Za-z0-9_-]', '')
     if ([string]::IsNullOrWhiteSpace($safeName)) { throw 'Name did not contain any filename-safe characters.' }

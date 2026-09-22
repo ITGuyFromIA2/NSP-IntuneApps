@@ -60,7 +60,7 @@ function New-NSPAdobeApp {
     if ($ResolveReaderWithEvergreen -and $PackagePath) {
         throw 'Choose either PackagePath or ResolveReaderWithEvergreen, not both.'
     }
-    if (-not $OutputRoot) { $OutputRoot = Join-Path $RepoRoot 'Config\Local\GeneratedApps' }
+    if (-not $OutputRoot) { $OutputRoot = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { Join-Path $RepoRoot 'Config\Local\GeneratedApps' } else { Join-Path $RepoRoot 'Apps' } }
 
     $temporaryDownload = $null
     try {

@@ -60,7 +60,7 @@ function New-NSPRdpApp {
     if ([string]::IsNullOrWhiteSpace($Name)) { throw 'Name is required.' }
     if ([string]::IsNullOrWhiteSpace($HostName)) { throw 'HostName is required.' }
     if ($Mode -eq 'RemoteApp' -and [string]::IsNullOrWhiteSpace($RemoteAppAlias)) { throw 'RemoteAppAlias is required for RemoteApp mode.' }
-    if (-not $OutputRoot) { $OutputRoot = Join-Path $RepoRoot 'Config\Local\GeneratedApps' }
+    if (-not $OutputRoot) { $OutputRoot = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { Join-Path $RepoRoot 'Config\Local\GeneratedApps' } else { Join-Path $RepoRoot 'Apps' } }
     $safeName = ($Name -replace '[^A-Za-z0-9_-]', '')
     $id = "Rdp$safeName"
     $appRoot = Join-Path $OutputRoot $id
