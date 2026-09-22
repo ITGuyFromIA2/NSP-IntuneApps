@@ -27,6 +27,7 @@ function Get-NSPAppDeploymentRunSummary {
             CurrentStage      = [string]$currentStage.Name
             CurrentStageState = [string]$currentStage.Status
             LastUpdatedAtUtc  = [string]$run.LastUpdatedAtUtc
+            AppNames          = @($entries | ForEach-Object { [string]$_.Name })
         }
     }
 }

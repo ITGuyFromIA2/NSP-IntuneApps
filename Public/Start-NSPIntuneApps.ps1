@@ -147,7 +147,8 @@ function Start-NSPIntuneApps {
                 if ($bindablePlans.Count -gt 0) {
                     Write-Host 'Bind this inventory to a tracker now? No tenant data will be changed.' -ForegroundColor Cyan
                     for ($index = 0; $index -lt $bindablePlans.Count; $index++) {
-                        Write-Host ("[{0}] {1}" -f ($index + 1), $bindablePlans[$index].FileName)
+                        $planItem = $bindablePlans[$index]
+                        Write-Host ("[{0}] {1} | modified {2} | {3}" -f ($index + 1), $planItem.FileName, $planItem.LastModifiedAt, (Format-NSPAppList -Names $planItem.AppNames))
                     }
                     Write-Host '[N] Save inventory only'
                     $allowedPlans = @(@(1..$bindablePlans.Count | ForEach-Object { [string]$_ }) + 'N')
@@ -169,7 +170,7 @@ function Start-NSPIntuneApps {
                 } else {
                     for ($index = 0; $index -lt $recentPlans.Count; $index++) {
                         $item = $recentPlans[$index]
-                        Write-Host ("[{0}] {1} | approved {2}, skipped {3}, pending {4}, attention {5}" -f ($index + 1), $item.FileName, $item.Approved, $item.Skipped, $item.Pending, $item.AttentionRequired)
+                        Write-Host ("[{0}] {1} | modified {2} | approved {3}, skipped {4}, pending {5}, attention {6} | {7}" -f ($index + 1), $item.FileName, $item.LastModifiedAt, $item.Approved, $item.Skipped, $item.Pending, $item.AttentionRequired, (Format-NSPAppList -Names $item.AppNames))
                     }
                     $allowedPlans = @(1..$recentPlans.Count | ForEach-Object { [string]$_ })
                     $planChoice = Read-NSPMenuChoice -Prompt 'Tracker to resume' -Allowed $allowedPlans -Default '1'
@@ -211,7 +212,7 @@ function Start-NSPIntuneApps {
                     $recentRuns = @($savedRuns | Select-Object -First 9)
                     for ($index = 0; $index -lt $recentRuns.Count; $index++) {
                         $item = $recentRuns[$index]
-                        Write-Host ("[{0}] {1} | {2} / {3} ({4}) | {5}" -f ($index + 1), (Split-Path -Path $item.RunPath -Leaf), $item.CurrentApp, $item.CurrentStage, $item.CurrentStageState, $item.Status)
+                        Write-Host ("[{0}] {1} | updated {2} | {3} / {4} ({5}) | {6} | {7}" -f ($index + 1), (Split-Path -Path $item.RunPath -Leaf), $item.LastUpdatedAtUtc, $item.CurrentApp, $item.CurrentStage, $item.CurrentStageState, $item.Status, (Format-NSPAppList -Names $item.AppNames))
                     }
                     $allowedRuns = @(1..$recentRuns.Count | ForEach-Object { [string]$_ })
                     $runChoice = Read-NSPMenuChoice -Prompt 'Run journal to advance' -Allowed $allowedRuns -Default '1'
@@ -255,7 +256,7 @@ function Start-NSPIntuneApps {
                 $preview | Format-List
                 if ($preview.Status -in @('PlanOnly', 'NeedsRedirectUriRepair')) {
                     $actionLabel = if ($preview.Status -eq 'NeedsRedirectUriRepair') { 'Repair the broker redirect URI now' } else { 'Create the app registration and grant admin consent now' }
-                    $executeChoice = Read-NSPMenuChoice -Prompt "$actionLabel? [Y/N]" -Allowed @('Y','N') -Default 'N'
+                    $executeChoice = Read-NSPMenuChoice -Prompt "${actionLabel}? [Y/N]" -Allowed @('Y','N') -Default 'N'
                     if ($executeChoice -eq 'Y') {
                         $result = Register-NSPIntuneWin32AppRegistration -RepoRoot $RepoRoot -Execute -Confirm:$false
                         $result | Format-List

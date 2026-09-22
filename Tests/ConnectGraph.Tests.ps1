@@ -43,12 +43,12 @@ Describe 'Connect-NSPGraph' {
     }
 
     Context 'connecting with a registered app instead of the SDK default' {
-        It 'passes ClientId and TenantId through to Connect-MgGraph when provided' {
+        It 'passes ClientId and TenantId through to Connect-MgGraph when there is no existing context' {
             InModuleScope NSP.IntuneApps {
                 Mock Connect-MgGraph { } -ModuleName NSP.IntuneApps
-                function Get-MgContext { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com'; Scopes = @('DeviceManagementApps.Read.All') } }
+                function Get-MgContext { $null }
 
-                Connect-NSPGraph -Scopes 'DeviceManagementApps.Read.All' -Connect -ClientId 'client-1' -TenantId 'tenant-1' | Out-Null
+                Connect-NSPGraph -Scopes 'DeviceManagementApps.Read.All' -Connect -ClientId 'client-1' -TenantId 'tenant-1' -Optional | Out-Null
 
                 Should -Invoke Connect-MgGraph -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
                     $ClientId -eq 'client-1' -and $TenantId -eq 'tenant-1'
@@ -59,13 +59,49 @@ Describe 'Connect-NSPGraph' {
         It 'omits ClientId and TenantId when not provided, falling back to the SDK default app' {
             InModuleScope NSP.IntuneApps {
                 Mock Connect-MgGraph { } -ModuleName NSP.IntuneApps
-                function Get-MgContext { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com'; Scopes = @('DeviceManagementApps.Read.All') } }
+                function Get-MgContext { $null }
 
-                Connect-NSPGraph -Scopes 'DeviceManagementApps.Read.All' -Connect | Out-Null
+                Connect-NSPGraph -Scopes 'DeviceManagementApps.Read.All' -Connect -Optional | Out-Null
 
                 Should -Invoke Connect-MgGraph -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
                     $null -eq $ClientId -and $null -eq $TenantId
                 }
+            }
+        }
+    }
+
+    Context 'avoiding a redundant reconnect' {
+        It 'does not call Connect-MgGraph again when the existing session already matches client, tenant, and scopes' {
+            InModuleScope NSP.IntuneApps {
+                Mock Connect-MgGraph { throw 'should not be called' } -ModuleName NSP.IntuneApps
+                function Get-MgContext { [pscustomobject]@{ TenantId = 'tenant-1'; ClientId = 'client-1'; Account = 'operator@example.com'; Scopes = @('DeviceManagementApps.ReadWrite.All') } }
+
+                $context = Connect-NSPGraph -Scopes 'DeviceManagementApps.ReadWrite.All' -Connect -ClientId 'client-1' -TenantId 'tenant-1'
+
+                $context.TenantId | Should -Be 'tenant-1'
+                Should -Invoke Connect-MgGraph -Times 0 -ModuleName NSP.IntuneApps
+            }
+        }
+
+        It 'reconnects when the existing session is authenticated as a different app' {
+            InModuleScope NSP.IntuneApps {
+                Mock Connect-MgGraph { } -ModuleName NSP.IntuneApps
+                function Get-MgContext { [pscustomobject]@{ TenantId = 'tenant-1'; ClientId = 'some-other-client'; Account = 'operator@example.com'; Scopes = @('DeviceManagementApps.ReadWrite.All') } }
+
+                Connect-NSPGraph -Scopes 'DeviceManagementApps.ReadWrite.All' -Connect -ClientId 'client-1' -TenantId 'tenant-1' -Optional | Out-Null
+
+                Should -Invoke Connect-MgGraph -Times 1 -ModuleName NSP.IntuneApps
+            }
+        }
+
+        It 'reconnects when the existing session is missing a required scope' {
+            InModuleScope NSP.IntuneApps {
+                Mock Connect-MgGraph { } -ModuleName NSP.IntuneApps
+                function Get-MgContext { [pscustomobject]@{ TenantId = 'tenant-1'; ClientId = 'client-1'; Account = 'operator@example.com'; Scopes = @('Group.Read.All') } }
+
+                Connect-NSPGraph -Scopes 'DeviceManagementApps.ReadWrite.All' -Connect -ClientId 'client-1' -TenantId 'tenant-1' -Optional | Out-Null
+
+                Should -Invoke Connect-MgGraph -Times 1 -ModuleName NSP.IntuneApps
             }
         }
     }

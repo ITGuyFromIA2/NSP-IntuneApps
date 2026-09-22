@@ -10,6 +10,11 @@ function Connect-NSPGraph {
         same benefit IntuneWin32App's Connect-MSIntuneGraph already gets from using one app
         consistently. Without them, this falls back to the SDK's own default app (unchanged
         behavior for callers that don't yet know a registration exists).
+
+        -Connect only actually calls Connect-MgGraph when the existing session (if any) is
+        insufficient - missing a scope, or authenticated as a different app/tenant than
+        requested. Reconnecting unconditionally on every call was itself a source of repeated
+        sign-in prompts even when a perfectly good session already existed this process.
     #>
     [CmdletBinding()]
     param(
@@ -26,10 +31,17 @@ function Connect-NSPGraph {
             Install-NSPModule -Name Microsoft.Graph.Authentication -Scope CurrentUser
         }
         Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-        $connectArgs = @{ Scopes = $Scopes; NoWelcome = $true }
-        if ($ClientId) { $connectArgs.ClientId = $ClientId }
-        if ($TenantId) { $connectArgs.TenantId = $TenantId }
-        Connect-MgGraph @connectArgs | Out-Null
+
+        $existingContext = if (Get-Command Get-MgContext -ErrorAction SilentlyContinue) { Get-MgContext } else { $null }
+        $hasRequiredScopes = $existingContext -and (@($Scopes | Where-Object { $_ -notin @($existingContext.Scopes) })).Count -eq 0
+        $matchesRequestedApp = (-not $ClientId -or $existingContext.ClientId -eq $ClientId) -and (-not $TenantId -or $existingContext.TenantId -eq $TenantId)
+
+        if (-not ($existingContext -and $hasRequiredScopes -and $matchesRequestedApp)) {
+            $connectArgs = @{ Scopes = $Scopes; NoWelcome = $true }
+            if ($ClientId) { $connectArgs.ClientId = $ClientId }
+            if ($TenantId) { $connectArgs.TenantId = $TenantId }
+            Connect-MgGraph @connectArgs | Out-Null
+        }
     }
 
     $context = if (Get-Command Get-MgContext -ErrorAction SilentlyContinue) { Get-MgContext } else { $null }

@@ -10,9 +10,9 @@ Describe 'Deployment plan summary' {
             SchemaVersion='1.1'; PlanType='Win32AppDeployment'; CreatedAt='2026-09-18T12:00:00-05:00'
             TenantId='tenant-id'; SafetyMode='PlanOnly'; InventoryResolvedAt='2026-09-18T12:05:00-05:00'
             Entries=@(
-                @{ Decision='Approved'; ExecutionStatus='Completed'; PlannedAction='NoChange' }
-                @{ Decision='Skipped'; ExecutionStatus='NotStarted'; PlannedAction='AdoptOrReview' }
-                @{ Decision='Pending'; ExecutionStatus='Failed'; PlannedAction='UpdateContentInPlace' }
+                @{ Name='AppOne'; Decision='Approved'; ExecutionStatus='Completed'; PlannedAction='NoChange' }
+                @{ Name='AppTwo'; Decision='Skipped'; ExecutionStatus='NotStarted'; PlannedAction='AdoptOrReview' }
+                @{ Name='AppThree'; Decision='Pending'; ExecutionStatus='Failed'; PlannedAction='UpdateContentInPlace' }
             )
         } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $planPath
 
@@ -25,6 +25,7 @@ Describe 'Deployment plan summary' {
         $summary.Failed | Should -Be 1
         $summary.AttentionRequired | Should -Be 2
         $summary.InventoryResolved | Should -BeTrue
+        $summary.AppNames | Should -Be @('AppOne', 'AppTwo', 'AppThree')
     }
 
     It 'returns no records when the default tracker folder is absent' {

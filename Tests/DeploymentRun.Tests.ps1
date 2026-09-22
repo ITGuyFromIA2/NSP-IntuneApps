@@ -26,6 +26,7 @@ Describe 'Resumable deployment run journal' {
         $summary.CurrentStage | Should -Be 'ValidatePlan'
         $summary.CurrentStageState | Should -Be 'Pending'
         $summary.Completed | Should -Be 0
+        $summary.AppNames | Should -Be @('MetadataApp', 'NoChangeApp')
     }
 
     It 'sets CurrentApp correctly for a plan with exactly one approved entry' {

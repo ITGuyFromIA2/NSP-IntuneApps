@@ -42,6 +42,7 @@ function Get-NSPAppDeploymentPlanSummary {
                 AttentionRequired = $attention
                 InventoryResolved = -not [string]::IsNullOrWhiteSpace([string]$plan.InventoryResolvedAt)
                 SafetyMode        = [string]$plan.SafetyMode
+                AppNames          = @($entries | ForEach-Object { [string]$_.Name })
             }
         } catch {
             Write-Warning "Could not read deployment plan '$path': $($_.Exception.Message)"
