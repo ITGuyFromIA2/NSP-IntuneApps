@@ -70,7 +70,7 @@ Only this repository may be edited during this effort. Downstream repositories a
 
 ## Current work
 
-The first downstream-only app wave is implemented as sanitized generic apps and generators; its remaining external step is the reviewed private Canon/HP artifact release. Disposable-machine validation for Parallels, DelegateService/SetACL, and AutoIt is now complete (see Phase 3 and [docs/TestVM.md](docs/TestVM.md)). The Phase 4 deployment executor's Create path is now implemented and unit-tested; the next work is verifying it end to end against a real test tenant (VCred), then update-in-place/supersedence execution, plus the Parallels guided configuration generator and the engine-neutral schema-v2 runner noted under Phase 3. The exact handoff state, test evidence, and uncommitted-file warning are in [HANDOFF.md](HANDOFF.md).
+The first downstream-only app wave is implemented as sanitized generic apps and generators; its remaining external step is the reviewed private Canon/HP artifact release. Disposable-machine validation for Parallels, DelegateService/SetACL, and AutoIt is now complete (see Phase 3 and [docs/TestVM.md](docs/TestVM.md)). The Phase 4 deployment executor's Create and UpdateContentInPlace paths are implemented, unit-tested, and (for Create) verified end to end against a real test tenant using VCred; the next work is `UpdateMetadataInPlace`/supersedence execution, plus the Parallels guided configuration generator and the engine-neutral schema-v2 runner noted under Phase 3. The exact handoff state, test evidence, and uncommitted-file warning are in [HANDOFF.md](HANDOFF.md).
 
 Vendor helper binaries follow a procurement policy rather than being copied into source. Bitdefender's vendor-published wrapper is retrieved and Authenticode-validated on the endpoint. SetACL 3.1.2 is retrieved directly from its publisher because its redistribution terms require a license when bundled; its publisher archive is SHA-256 pinned after confirming the signed x86 and x64 executable variants. DelegateService's install/detect/uninstall mechanism is functionally verified against a disposable local service and user (the SetACL grant/revoke round-tripped correctly via `sc start` access checks, not just a textual ACL listing); the real production detection target (`IntuneManagementExtension`) remains unverified since the test VM isn't Intune-enrolled. Historical ServiceUI copies are not replaced: Microsoft retired MDT in January 2026, Managed Reboots no longer needs ServiceUI, and any future legacy exception requires an explicit reviewed design. See `docs/VendorDependencyPolicy.md`.
 
@@ -125,20 +125,44 @@ case) is implemented per the plan in [docs/DeploymentExecutorPlan.md](docs/Deplo
 `Connect-NSPGraph`, `Register-NSPIntuneWin32AppRegistration`, `Resolve-NSPAppBuildPlan`,
 `Set-NSPAppSignature`, `New-NSPAppPackage`, `New-NSPIntuneWin32App`,
 `Invoke-NSPAppDeploymentRunStage`, and the dashboard's "Advance the next stage of a saved run"
-option. All of it is unit-tested against offline fixtures and mocked Graph/`IntuneWin32App`
-calls; it has not yet been verified end to end against a real test tenant (see
-`docs/DeploymentExecutorPlan.md`'s "Verification" section for that remaining manual step).
-Update-in-place and supersedence execution remain deliberately out of scope and fail clearly
-(`PatchMetadata`, `UploadContent`, `CommitContent`, `AddSupersedence` are not yet implemented).
+option. **It has since been verified end to end against a real test tenant**: VCred's run journal
+completed all six Create stages with zero failures, and the created app's Notes field carried all
+three `[NSP-...]` marker lines. Two real defects surfaced only by that live run and were fixed:
+`Get-NSPIntuneAppInventory`'s Graph query used an invalid OData path-segment cast instead of
+`$filter=isof(...)`, and `New-NSPCodeSigningCertificate` generated certificates with Basic
+Constraints `ca=TRUE` (CA) instead of `ca=FALSE` (end entity), which fails Authenticode signing
+with `TRUST_E_BASIC_CONSTRAINTS`. The live run also surfaced a real defect in the VCred catalog
+entry itself (not the executor): its detection script dot-sourced sibling files that only exist
+in the full package, but Intune ships a custom-script detection rule to the client as a single
+standalone file with no siblings; `Detect_VCred.ps1` is now self-contained.
+
+The `UpdateContentInPlace` path is now also implemented: `Update-NSPIntuneWin32AppContent`
+(`UploadContent`/`CommitContent` stages, via `IntuneWin32App`'s `Update-IntuneWin32AppPackageFile`,
+which performs the content-version upload+commit as one call) and `Set-NSPAppManagementNotes`
+(`RecordManagementNotes`, which does real work here since - unlike Create - no earlier stage in
+this path already patches Notes). `UpdateMetadataInPlace` and `CreateSupersedingApp` remain
+deliberately out of scope and fail clearly (`PatchMetadata`, `AddSupersedence` are not yet
+implemented).
+
+The dashboard was also reworked based on the live test-tenant run: routine Graph calls
+(`Get-NSPIntuneAppInventory`, the management-notes PATCH) now request the same
+`DeviceManagementApps.ReadWrite.All` scope so one login covers the whole flow instead of
+reprompting per differing scope string (the `IntuneWin32App` module's own `Connect-MSIntuneGraph`
+session is a separate auth stack and still needs one login of its own - two total, down from
+4-5); `[6]` now shows a numbered catalog picker so a batch can be built by number instead of only
+by typed name; `Register-NSPIntuneWin32AppRegistration` is now reachable from the dashboard
+(`[11]`) instead of only as a manual cmdlet; and `[10]` now offers an auto-advance option that
+runs every remaining stage of a run without a per-stage confirm, clearly labeled for test-tenant
+use since it still performs real tenant writes.
 
 - [x] Define stable management markers and offline action resolution.
 - [x] Compute deterministic metadata and source-content hashes while ignoring Authenticode renewal and checkout line endings.
-- [x] Record the deterministic source hashes in Intune Notes during create/update execution (create path; update path pending).
+- [x] Record the deterministic source hashes in Intune Notes during create/update execution.
 - [x] Add read-only tenant inventory with delegated Graph login, tenant/account reporting, and an ignored local snapshot.
 - [x] Bind saved inventory JSON to the local tracker and resolve Create, NoChange, UpdateMetadataInPlace, UpdateContentInPlace, CreateSupersedingApp, AdoptOrReview, or Conflict without tenant writes.
 - [x] Connect delegated Graph discovery to the saved inventory format after tenant/account confirmation.
 - [ ] Implement metadata PATCH while preserving assignments, dependencies, reporting history, and object ID.
-- [ ] Implement a new content-version upload/commit against the existing object.
+- [x] Implement a new content-version upload/commit against the existing object.
 - [ ] Implement reviewed supersedence with graph-depth validation and explicit update-versus-replace choice.
 - [ ] Keep cleanup/retirement as a separate explicitly approved workflow.
 - [x] Add resumable per-operation logs and a concise sanitized Markdown run report. Operator-entered transition messages stay in the ignored local journal and are omitted from the durable report.

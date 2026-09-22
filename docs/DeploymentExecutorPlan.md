@@ -1,12 +1,17 @@
 # Deployment executor implementation plan (handoff)
 
-**Status (2026-09-21, later same day): implemented and unit-tested.** All eight pieces below
-were built as described, plus the dashboard wiring, with tests added per the "Tests" section.
-See [docs/DeploymentEngine.md](DeploymentEngine.md#implemented-the-create-path) for the current,
-short summary of what exists. What has **not** happened yet is the "Verification (test tenant,
-VCred)" section below — that still needs a real test tenant and a human running it interactively.
-This document is kept until that verification lands, since its verification steps remain the
-actionable next step; the design narrative below now describes what was built, not a proposal.
+**Status (2026-09-22): verified end to end against a real test tenant, plus UpdateContentInPlace.**
+All eight pieces below were built as described, the "Verification (test tenant, VCred)" section
+below has been run for real (VCred's run journal completed all six Create stages with zero
+failures, Notes carried all three markers), and `UpdateContentInPlace` (`Update-NSPIntuneWin32AppContent`,
+`Set-NSPAppManagementNotes`) has since been added on top of it. Three real defects were found and
+fixed along the way: an invalid Graph OData query in `Get-NSPIntuneAppInventory`, a Basic
+Constraints `ca=TRUE` bug in `New-NSPCodeSigningCertificate` that broke Authenticode signing, and
+a non-self-contained VCred detection script. See
+[docs/DeploymentEngine.md](DeploymentEngine.md#implemented-the-create-path) for the current
+summary of what exists, and its "Implemented: the UpdateContentInPlace path" section. This
+document is kept for its design narrative and rationale; `PLAN.md` and `docs/DeploymentEngine.md`
+now carry the current state.
 
 This was originally an approved, not-yet-implemented plan for the Phase 4 deployment executor,
 written on the disposable test VM (2026-09-21) and handed off so implementation could happen on a

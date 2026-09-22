@@ -39,8 +39,9 @@ function Start-NSPIntuneApps {
         Write-Host '[8] Resume a saved deployment tracker'
         Write-Host '[9] View resumable deployment run journals'
         Write-Host '[10] Advance the next stage of a saved run'
+        Write-Host '[11] Register/verify the tenant app registration (one-time bootstrap)'
         Write-Host '[Q] Quit'
-        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','Q')
+        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','11','Q')
 
         switch ($choice) {
             '1' {
@@ -89,12 +90,32 @@ function Start-NSPIntuneApps {
                 Write-Host 'This was plan-only. Run Publish-NSPCodeSigningTrust with -Execute only after reviewing tenant and target.' -ForegroundColor Yellow
             }
             '6' {
-                Write-Host 'Enter comma-separated catalog names, or press Enter to include every deployable app.'
-                $names = Read-Host 'Apps'
-                $selection = if ($names) { @($names -split ',' | ForEach-Object Trim | Where-Object { $_ }) } else { $null }
-                $planFile = New-NSPAppDeploymentPlan -RepoRoot $RepoRoot -AppName $selection
-                Write-Host "Tracker saved to $($planFile.FullName)" -ForegroundColor Green
-                Write-Host 'Collect and bind a read-only tenant inventory before approving any app action.' -ForegroundColor Yellow
+                $deployableCatalog = @($catalog | Where-Object Classification -eq 'Deployable' | Sort-Object Name)
+                if ($deployableCatalog.Count -eq 0) {
+                    Write-Warning 'No deployable catalog entries were found.'
+                } else {
+                    for ($index = 0; $index -lt $deployableCatalog.Count; $index++) {
+                        Write-Host ("[{0}] {1}" -f ($index + 1), $deployableCatalog[$index].Name)
+                    }
+                    Write-Host 'Build a batch by number (e.g. 1,3,5), by name, or press Enter to include every deployable app above.'
+                    $picked = Read-Host 'Apps'
+                    $selection = if ([string]::IsNullOrWhiteSpace($picked)) {
+                        $null
+                    } else {
+                        $tokens = @($picked -split ',' | ForEach-Object Trim | Where-Object { $_ })
+                        @($tokens | ForEach-Object {
+                            if ($_ -match '^\d+$' -and [int]$_ -ge 1 -and [int]$_ -le $deployableCatalog.Count) {
+                                $deployableCatalog[[int]$_ - 1].Name
+                            } else {
+                                $_
+                            }
+                        })
+                    }
+                    if ($selection) { Write-Host "Batch: $($selection -join ', ')" -ForegroundColor Cyan }
+                    $planFile = New-NSPAppDeploymentPlan -RepoRoot $RepoRoot -AppName $selection
+                    Write-Host "Tracker saved to $($planFile.FullName)" -ForegroundColor Green
+                    Write-Host 'Collect and bind a read-only tenant inventory before approving any app action.' -ForegroundColor Yellow
+                }
             }
             '7' {
                 Write-Host 'A delegated browser login may open. Requested permission: DeviceManagementApps.Read.All (read-only).' -ForegroundColor Yellow
@@ -158,7 +179,7 @@ function Start-NSPIntuneApps {
                     Write-Warning 'No deployment run journals were found.'
                 } else {
                     $savedRuns | Select-Object Status, CurrentApp, CurrentStage, CurrentStageState, Completed, Total, Failed, LastUpdatedAtUtc, RunPath | Format-Table -Wrap
-                    Write-Host 'Use [10] to advance a run one stage at a time. UpdateMetadataInPlace, UpdateContentInPlace, and CreateSupersedingApp stages are not yet implemented.' -ForegroundColor Yellow
+                    Write-Host 'Use [10] to advance a run one stage at a time, or auto-advance every remaining stage for testing. UpdateMetadataInPlace and CreateSupersedingApp stages are not yet implemented.' -ForegroundColor Yellow
                 }
             }
             '10' {
@@ -180,13 +201,43 @@ function Start-NSPIntuneApps {
                     } else {
                         Write-Host "Next: $($preview.Stage) for $($preview.App) (planned action: $($preview.PlannedAction))" -ForegroundColor Cyan
                         Write-Host $preview.Message
-                        $executeChoice = Read-NSPMenuChoice -Prompt 'Execute this stage now? [Y/N]' -Allowed @('Y','N') -Default 'N'
+                        Write-Host '[Y] Execute this stage only'
+                        Write-Host '[A] Auto-advance every remaining stage for this run without stopping to confirm each one' -ForegroundColor Yellow
+                        Write-Host '[N] Cancel'
+                        $executeChoice = Read-NSPMenuChoice -Prompt 'Choice' -Allowed @('Y','A','N') -Default 'N'
                         if ($executeChoice -eq 'Y') {
                             $result = Invoke-NSPAppDeploymentRunStage -RunPath $selectedRun.RunPath -Execute -Confirm:$false
                             $result | Format-List
+                        } elseif ($executeChoice -eq 'A') {
+                            Write-Warning 'Auto-advancing without a per-stage confirm. This still performs real tenant writes - use only against a test tenant. Press Ctrl+C to stop early.'
+                            $result = $null
+                            try {
+                                do {
+                                    $result = Invoke-NSPAppDeploymentRunStage -RunPath $selectedRun.RunPath -Execute -Confirm:$false
+                                    Write-Host ("{0} / {1} ({2}) -> {3}" -f $result.CurrentApp, $result.CurrentStage, $result.CurrentStageState, $result.Status)
+                                } while ($result.CurrentApp -and $result.Status -in @('Ready', 'Running'))
+                            } catch {
+                                Write-Warning "Auto-advance stopped: $($_.Exception.Message)"
+                            }
+                            if ($result) { $result | Format-List }
                         } else {
                             Write-Host 'No changes were made.' -ForegroundColor Yellow
                         }
+                    }
+                }
+            }
+            '11' {
+                Write-Host 'A delegated browser login may open. Requested permissions: Application.ReadWrite.All, Directory.ReadWrite.All, DelegatedPermissionGrant.ReadWrite.All.' -ForegroundColor Yellow
+                Write-Host 'This is a one-time, tenant-wide bootstrap and requires a Global/Privileged Role Administrator account.' -ForegroundColor Yellow
+                $preview = Register-NSPIntuneWin32AppRegistration -RepoRoot $RepoRoot
+                $preview | Format-List
+                if ($preview.Status -eq 'PlanOnly') {
+                    $executeChoice = Read-NSPMenuChoice -Prompt 'Create the app registration and grant admin consent now? [Y/N]' -Allowed @('Y','N') -Default 'N'
+                    if ($executeChoice -eq 'Y') {
+                        $result = Register-NSPIntuneWin32AppRegistration -RepoRoot $RepoRoot -Execute -Confirm:$false
+                        $result | Format-List
+                    } else {
+                        Write-Host 'No changes were made.' -ForegroundColor Yellow
                     }
                 }
             }

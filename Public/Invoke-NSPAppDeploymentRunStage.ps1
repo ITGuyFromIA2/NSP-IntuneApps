@@ -12,10 +12,14 @@ function Invoke-NSPAppDeploymentRunStage {
         transition; instead it is its own stage here that does no new work, since the package
         was already produced during Build and nothing since has changed it. RecordManagementNotes
         is the same kind of no-op after CreateApp, which patches the management-notes marker as
-        part of the same tenant write that creates the app. Stages belonging to
-        UpdateMetadataInPlace, UpdateContentInPlace, or CreateSupersedingApp are not yet
-        implemented and fail clearly rather than being guessed at. This never advances more
-        than one app's worth of work unattended.
+        part of the same tenant write that creates the app. For UpdateContentInPlace the fold
+        runs the other way: UploadContent does the real content-version write
+        (Update-IntuneWin32AppPackageFile handles upload+commit as one call), so CommitContent
+        is the no-op stage, and RecordManagementNotes does real work (Set-NSPAppManagementNotes)
+        since no earlier stage in that path already touched the object's Notes field. Stages
+        belonging to UpdateMetadataInPlace or CreateSupersedingApp are not yet implemented and
+        fail clearly rather than being guessed at. This never advances more than one app's
+        worth of work unattended.
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     param(
@@ -23,7 +27,7 @@ function Invoke-NSPAppDeploymentRunStage {
         [switch]$Execute
     )
 
-    $unimplementedStages = @('PatchMetadata', 'UploadContent', 'CommitContent', 'AddSupersedence')
+    $unimplementedStages = @('PatchMetadata', 'AddSupersedence')
 
     $resolvedRunPath = (Resolve-Path -LiteralPath $RunPath -ErrorAction Stop).Path
     $run = Get-Content -LiteralPath $resolvedRunPath -Raw | ConvertFrom-Json
@@ -57,6 +61,25 @@ function Invoke-NSPAppDeploymentRunStage {
     $planEntry = $plan.Entries | Where-Object Name -eq $appName | Select-Object -First 1
     $repoRoot = [string]$plan.RepoRoot
 
+    $resolvePackagePath = {
+        $catalogEntry = Get-NSPIntuneAppCatalog -RepoRoot $repoRoot | Where-Object Name -eq $appName
+        if (-not $catalogEntry) { throw "App was not found in the catalog: $appName" }
+        $VariableConfig = $null
+        . $catalogEntry.SettingsPath
+        $buildPlan = Resolve-NSPAppBuildPlan -Name $appName -SettingsPath $catalogEntry.SettingsPath -Path $catalogEntry.Path -VariableConfig $VariableConfig
+        $packageFileName = [IO.Path]::GetFileNameWithoutExtension($buildPlan.SetupFileName) + '.intunewin'
+        $packagePath = Join-Path (Join-Path $repoRoot "Config\Local\Build\$appName") $packageFileName
+        if (-not (Test-Path -LiteralPath $packagePath)) { throw "Built package not found at $packagePath. Run the Build stage first." }
+        $packagePath
+    }
+    $resolveRegistration = {
+        $registrationPath = Join-Path $repoRoot 'Config\Local\GraphAppRegistration.json'
+        if (-not (Test-Path -LiteralPath $registrationPath)) { throw "No tenant app registration is recorded at $registrationPath. Run Register-NSPIntuneWin32AppRegistration -Execute first." }
+        $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+        if ([string]$registration.TenantId -ne [string]$run.TenantId) { throw "Recorded app registration is for tenant $($registration.TenantId), but this run targets $($run.TenantId)." }
+        $registration
+    }
+
     Set-NSPAppDeploymentRunStage -RunPath $resolvedRunPath -AppName $appName -Stage $stageName -Status Running -Confirm:$false | Out-Null
     try {
         $stageMessage = switch ($stageName) {
@@ -79,26 +102,32 @@ function Invoke-NSPAppDeploymentRunStage {
                 'Packaging already completed during the Build stage; no further work is needed.'
             }
             'CreateApp' {
-                $catalogEntry = Get-NSPIntuneAppCatalog -RepoRoot $repoRoot | Where-Object Name -eq $appName
-                if (-not $catalogEntry) { throw "App was not found in the catalog: $appName" }
-                $VariableConfig = $null
-                . $catalogEntry.SettingsPath
-                $buildPlan = Resolve-NSPAppBuildPlan -Name $appName -SettingsPath $catalogEntry.SettingsPath -Path $catalogEntry.Path -VariableConfig $VariableConfig
-                $packageFileName = [IO.Path]::GetFileNameWithoutExtension($buildPlan.SetupFileName) + '.intunewin'
-                $packagePath = Join-Path (Join-Path $repoRoot "Config\Local\Build\$appName") $packageFileName
-                if (-not (Test-Path -LiteralPath $packagePath)) { throw "Built package not found at $packagePath. Run the Build stage first." }
-
-                $registrationPath = Join-Path $repoRoot 'Config\Local\GraphAppRegistration.json'
-                if (-not (Test-Path -LiteralPath $registrationPath)) { throw "No tenant app registration is recorded at $registrationPath. Run Register-NSPIntuneWin32AppRegistration -Execute first." }
-                $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
-                if ([string]$registration.TenantId -ne [string]$run.TenantId) { throw "Recorded app registration is for tenant $($registration.TenantId), but this run targets $($run.TenantId)." }
-
+                $packagePath = & $resolvePackagePath
+                $registration = & $resolveRegistration
                 $result = New-NSPIntuneWin32App -RepoRoot $repoRoot -AppName $appName -PackagePath $packagePath -TenantId ([string]$run.TenantId) -ClientId ([string]$registration.ClientId) -Execute -Confirm:$false
                 if ($result.Status -ne 'Created') { throw "New-NSPIntuneWin32App did not report a Created status for '$appName' (got '$($result.Status)')." }
                 "Created Intune app $($result.IntuneAppId)."
             }
+            'UploadContent' {
+                if (-not $planEntry.IntuneObjectId) { throw "Plan entry for '$appName' has no recorded IntuneObjectId; re-plan against a bound tenant inventory." }
+                $packagePath = & $resolvePackagePath
+                $registration = & $resolveRegistration
+                $result = Update-NSPIntuneWin32AppContent -AppName $appName -PackagePath $packagePath -IntuneObjectId ([string]$planEntry.IntuneObjectId) -TenantId ([string]$run.TenantId) -ClientId ([string]$registration.ClientId) -Execute -Confirm:$false
+                if ($result.Status -ne 'Updated') { throw "Update-NSPIntuneWin32AppContent did not report an Updated status for '$appName' (got '$($result.Status)')." }
+                "Uploaded a new content version for Intune app $($result.IntuneObjectId)."
+            }
+            'CommitContent' {
+                'Content commit already completed as part of the UploadContent stage; no further work is needed.'
+            }
             'RecordManagementNotes' {
-                'Management notes were already recorded as part of the CreateApp stage; no further work is needed.'
+                if ([string]$planEntry.PlannedAction -eq 'Create') {
+                    'Management notes were already recorded as part of the CreateApp stage; no further work is needed.'
+                } else {
+                    if (-not $planEntry.IntuneObjectId) { throw "Plan entry for '$appName' has no recorded IntuneObjectId; re-plan against a bound tenant inventory." }
+                    $result = Set-NSPAppManagementNotes -RepoRoot $repoRoot -AppName $appName -IntuneObjectId ([string]$planEntry.IntuneObjectId) -Execute -Confirm:$false
+                    if ($result.Status -ne 'Recorded') { throw "Set-NSPAppManagementNotes did not report a Recorded status for '$appName' (got '$($result.Status)')." }
+                    "Recorded management notes on Intune app $($result.IntuneObjectId)."
+                }
             }
             default { throw "Stage '$stageName' is not recognized by this executor." }
         }

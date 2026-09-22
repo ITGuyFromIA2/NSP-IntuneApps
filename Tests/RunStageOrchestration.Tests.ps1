@@ -33,7 +33,7 @@ $VariableConfig.RunAs32Bit_Detection = $false
         }
 
         function New-FixtureRun {
-            param([string]$Root, [string]$PlannedAction = 'Create', [string]$TenantId = 'tenant-1')
+            param([string]$Root, [string]$PlannedAction = 'Create', [string]$TenantId = 'tenant-1', [string]$IntuneObjectId = $null)
             New-FixtureRepo -Root $Root
             $sourceState = Get-NSPAppSourceState -RepoRoot $Root -AppName 'Fixture'
             $planPath = Join-Path $Root 'plan.json'
@@ -44,7 +44,7 @@ $VariableConfig.RunAs32Bit_Detection = $false
                     @{
                         Order = 1; Name = 'Fixture'; SourceId = 'Fixture'; DisplayName = 'Fixture App'
                         MetadataSha256 = $sourceState.MetadataSha256; ContentSha256 = $sourceState.ContentSha256
-                        PlannedAction = $PlannedAction; Decision = 'Approved'; CanExecute = $true; IntuneObjectId = $null
+                        PlannedAction = $PlannedAction; Decision = 'Approved'; CanExecute = $true; IntuneObjectId = $IntuneObjectId
                     }
                 )
             } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $planPath
@@ -178,6 +178,49 @@ $VariableConfig.RunAs32Bit_Detection = $false
         New-Item -ItemType File -Path $packagePath -Force | Out-Null
 
         { Invoke-NSPAppDeploymentRunStage -RunPath $runPath -Execute -Confirm:$false } | Should -Throw '*Register-NSPIntuneWin32AppRegistration*'
+    }
+
+    It 'dispatches UploadContent for UpdateContentInPlace, folds CommitContent, and records notes via RecordManagementNotes' {
+        $root = Join-Path $TestDrive 'UpdateContentDispatch'
+        $runPath = New-FixtureRun -Root $root -PlannedAction 'UpdateContentInPlace' -IntuneObjectId 'existing-app-1'
+        Invoke-NSPAppDeploymentRunStage -RunPath $runPath -Execute -Confirm:$false | Out-Null
+        Mock New-NSPAppPackage { [pscustomobject]@{ AppName = 'Fixture'; PackagePath = 'C:\fake\Fixture.intunewin' } } -ModuleName NSP.IntuneApps
+        Invoke-NSPAppDeploymentRunStage -RunPath $runPath -Execute -Confirm:$false | Out-Null
+        Mock Set-NSPAppSignature { [pscustomobject]@{ AppName = 'Fixture'; Thumbprint = 'ABC123'; SignedFiles = @(1) } } -ModuleName NSP.IntuneApps
+        Invoke-NSPAppDeploymentRunStage -RunPath $runPath -Execute -Confirm:$false | Out-Null
+        Invoke-NSPAppDeploymentRunStage -RunPath $runPath -Execute -Confirm:$false | Out-Null
+
+        $packagePath = Join-Path $root 'Config\Local\Build\Fixture\DownloadInstall_Fixture.intunewin'
+        New-Item -ItemType Directory -Path (Split-Path -Path $packagePath -Parent) -Force | Out-Null
+        New-Item -ItemType File -Path $packagePath -Force | Out-Null
+
+        $registrationDir = Join-Path $root 'Config\Local'
+        New-Item -ItemType Directory -Path $registrationDir -Force | Out-Null
+        [ordered]@{ TenantId = 'tenant-1'; ClientId = 'client-1'; AppName = 'NSP-IntuneApps-Win32AppDeployment'; CreatedAtUtc = (Get-Date).ToString('o'); GrantedScopes = @() } |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $registrationDir 'GraphAppRegistration.json')
+
+        Mock Update-NSPIntuneWin32AppContent {
+            [pscustomobject]@{ Status = 'Updated'; AppName = 'Fixture'; IntuneObjectId = 'existing-app-1'; TenantId = 'tenant-1' }
+        } -ModuleName NSP.IntuneApps
+
+        $uploadSummary = Invoke-NSPAppDeploymentRunStage -RunPath $runPath -Execute -Confirm:$false
+        Should -Invoke Update-NSPIntuneWin32AppContent -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $PackagePath -eq $packagePath -and $IntuneObjectId -eq 'existing-app-1' -and $TenantId -eq 'tenant-1' -and $ClientId -eq 'client-1'
+        }
+        $uploadSummary.CurrentStage | Should -Be 'CommitContent'
+
+        $commitSummary = Invoke-NSPAppDeploymentRunStage -RunPath $runPath -Execute -Confirm:$false
+        $commitSummary.CurrentStage | Should -Be 'RecordManagementNotes'
+        $document = Get-Content -LiteralPath $runPath -Raw | ConvertFrom-Json
+        ($document.Entries[0].Stages | Where-Object Name -eq 'CommitContent').Status | Should -Be 'Succeeded'
+
+        Mock Set-NSPAppManagementNotes {
+            [pscustomobject]@{ Status = 'Recorded'; AppName = 'Fixture'; IntuneObjectId = 'existing-app-1'; TenantId = 'tenant-1'; ManagementNotes = '[NSP-IntuneApps:Fixture]' }
+        } -ModuleName NSP.IntuneApps
+
+        $finalSummary = Invoke-NSPAppDeploymentRunStage -RunPath $runPath -Execute -Confirm:$false
+        Should -Invoke Set-NSPAppManagementNotes -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter { $IntuneObjectId -eq 'existing-app-1' }
+        $finalSummary.Status | Should -Be 'Completed'
     }
 
     It 'fails stages belonging to not-yet-implemented executor paths clearly' {

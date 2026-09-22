@@ -42,6 +42,8 @@
         'New-NSPAppPackage'
         'New-NSPIntuneWin32App'
         'Invoke-NSPAppDeploymentRunStage'
+        'Update-NSPIntuneWin32AppContent'
+        'Set-NSPAppManagementNotes'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()

@@ -10,7 +10,11 @@ function Get-NSPIntuneAppInventory {
         [switch]$Connect
     )
 
-    $scope = 'DeviceManagementApps.Read.All'
+    # ReadWrite.All (not Read.All) deliberately matches the scope every other stage of this
+    # workflow (notes PATCH, content update) already needs. MSAL treats a different scope
+    # string as a new consent and reprompts even mid-session, so using one shared scope
+    # across the whole deployment flow is what lets a single login cover all of it.
+    $scope = 'DeviceManagementApps.ReadWrite.All'
     $context = Connect-NSPGraph -Scopes $scope -Connect:$Connect
 
     $uri = "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps?`$filter=isof('microsoft.graph.win32LobApp')&`$select=id,displayName,publisher,notes,lastModifiedDateTime,publishingState,microsoft.graph.win32LobApp/committedContentVersion"
