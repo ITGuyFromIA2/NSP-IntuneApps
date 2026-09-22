@@ -44,6 +44,13 @@ Describe 'Get-NSPIntuneAppAssignmentInventory' {
         $result.FilterCount | Should -Be 1
         $result.DistinctGroups.GroupDisplayName | Should -Contain 'All Sales Laptops'
 
+        # Format-Table/Format-List only resolve real PSObject properties, not hashtable keys -
+        # a bare [ordered]@{} here would report FilterCount correctly but render every column
+        # blank in the dashboard. Assert the actual type, not just dot-access, to catch that.
+        $result.Filters[0] | Should -BeOfType ([System.Management.Automation.PSCustomObject])
+        $result.Filters[0].DisplayName | Should -Be 'Corporate Windows'
+        ($result.Filters[0].PSObject.Properties.Name) | Should -Contain 'DisplayName'
+
         $groupAssignment = $result.Assignments | Where-Object GroupId -eq 'group-1'
         $groupAssignment.AppDisplayName | Should -Be 'VCred'
         $groupAssignment.GroupDisplayName | Should -Be 'All Sales Laptops'
