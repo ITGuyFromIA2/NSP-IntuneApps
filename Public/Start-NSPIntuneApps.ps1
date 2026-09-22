@@ -94,7 +94,22 @@ function Start-NSPIntuneApps {
                 $groupId = if ($target -eq 'Group') { Read-Host 'Enter the Microsoft Entra group object ID' } else { $null }
                 $plan = Get-NSPCodeSigningTrustPlan -RepoRoot $RepoRoot -AssignmentTarget $target -GroupId $groupId -Connect
                 $plan | Select-Object ProfileName, Action, Thumbprint, CertificateExpires, AssignmentTarget, AssignmentDisplayName, TenantId, Account, MissingUris, Conflicts, CanExecute | Format-List
-                Write-Host 'This was plan-only. Run Publish-NSPCodeSigningTrust with -Execute only after reviewing tenant and target.' -ForegroundColor Yellow
+                if (@($plan.Conflicts).Count -gt 0) {
+                    Write-Warning 'Conflicts were found. Resolve them before this plan can execute.'
+                } elseif (-not $plan.CanExecute) {
+                    Write-Warning 'This plan is not executable yet (check tenant authentication above).'
+                } elseif ($plan.Action -eq 'NoChange') {
+                    Write-Host 'The expected generation is already present in this profile. Nothing to publish.' -ForegroundColor Green
+                } else {
+                    $executeChoice = Read-NSPMenuChoice -Prompt "$($plan.Action) '$($plan.ProfileName)' for tenant $($plan.TenantId) now? [Y/N]" -Allowed @('Y','N') -Default 'N'
+                    if ($executeChoice -eq 'Y') {
+                        $result = Publish-NSPCodeSigningTrust -RepoRoot $RepoRoot -AssignmentTarget $target -GroupId $groupId -Execute -Confirm:$false
+                        $result | Select-Object ProfileName, Action, Thumbprint, TenantId, AssignmentTarget | Format-List
+                        Write-Host 'Trust profile published.' -ForegroundColor Green
+                    } else {
+                        Write-Host 'No changes were made.' -ForegroundColor Yellow
+                    }
+                }
             }
             '6' {
                 $deployableCatalog = @($catalog | Where-Object Classification -eq 'Deployable' | Sort-Object Name)
