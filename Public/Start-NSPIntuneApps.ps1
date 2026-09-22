@@ -38,8 +38,9 @@ function Start-NSPIntuneApps {
         Write-Host '[7] Save a read-only Intune app inventory'
         Write-Host '[8] Resume a saved deployment tracker'
         Write-Host '[9] View resumable deployment run journals'
+        Write-Host '[10] Advance the next stage of a saved run'
         Write-Host '[Q] Quit'
-        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','Q')
+        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','Q')
 
         switch ($choice) {
             '1' {
@@ -157,7 +158,36 @@ function Start-NSPIntuneApps {
                     Write-Warning 'No deployment run journals were found.'
                 } else {
                     $savedRuns | Select-Object Status, CurrentApp, CurrentStage, CurrentStageState, Completed, Total, Failed, LastUpdatedAtUtc, RunPath | Format-Table -Wrap
-                    Write-Host 'Run journals are local progress records. No Graph executor is enabled.' -ForegroundColor Yellow
+                    Write-Host 'Use [10] to advance a run one stage at a time. UpdateMetadataInPlace, UpdateContentInPlace, and CreateSupersedingApp stages are not yet implemented.' -ForegroundColor Yellow
+                }
+            }
+            '10' {
+                if ($savedRuns.Count -eq 0) {
+                    Write-Warning 'No deployment run journals were found.'
+                } else {
+                    $recentRuns = @($savedRuns | Select-Object -First 9)
+                    for ($index = 0; $index -lt $recentRuns.Count; $index++) {
+                        $item = $recentRuns[$index]
+                        Write-Host ("[{0}] {1} | {2} / {3} ({4}) | {5}" -f ($index + 1), (Split-Path -Path $item.RunPath -Leaf), $item.CurrentApp, $item.CurrentStage, $item.CurrentStageState, $item.Status)
+                    }
+                    $allowedRuns = @(1..$recentRuns.Count | ForEach-Object { [string]$_ })
+                    $runChoice = Read-NSPMenuChoice -Prompt 'Run journal to advance' -Allowed $allowedRuns -Default '1'
+                    $selectedRun = $recentRuns[[int]$runChoice - 1]
+                    $preview = Invoke-NSPAppDeploymentRunStage -RunPath $selectedRun.RunPath
+                    if ($preview.Status -ne 'PlanOnly') {
+                        $preview | Format-List
+                        Write-Warning 'This run has no pending stage to advance.'
+                    } else {
+                        Write-Host "Next: $($preview.Stage) for $($preview.App) (planned action: $($preview.PlannedAction))" -ForegroundColor Cyan
+                        Write-Host $preview.Message
+                        $executeChoice = Read-NSPMenuChoice -Prompt 'Execute this stage now? [Y/N]' -Allowed @('Y','N') -Default 'N'
+                        if ($executeChoice -eq 'Y') {
+                            $result = Invoke-NSPAppDeploymentRunStage -RunPath $selectedRun.RunPath -Execute -Confirm:$false
+                            $result | Format-List
+                        } else {
+                            Write-Host 'No changes were made.' -ForegroundColor Yellow
+                        }
+                    }
                 }
             }
         }

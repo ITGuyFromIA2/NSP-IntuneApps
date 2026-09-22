@@ -1,10 +1,17 @@
 # Deployment executor implementation plan (handoff)
 
-This is an approved, not-yet-implemented plan for the Phase 4 deployment executor, written on
-the disposable test VM (2026-09-21) and handed off here so implementation can happen on a
+**Status (2026-09-21, later same day): implemented and unit-tested.** All eight pieces below
+were built as described, plus the dashboard wiring, with tests added per the "Tests" section.
+See [docs/DeploymentEngine.md](DeploymentEngine.md#implemented-the-create-path) for the current,
+short summary of what exists. What has **not** happened yet is the "Verification (test tenant,
+VCred)" section below — that still needs a real test tenant and a human running it interactively.
+This document is kept until that verification lands, since its verification steps remain the
+actionable next step; the design narrative below now describes what was built, not a proposal.
+
+This was originally an approved, not-yet-implemented plan for the Phase 4 deployment executor,
+written on the disposable test VM (2026-09-21) and handed off so implementation could happen on a
 machine kept for real client work, connected to the tenant that will actually be used — not the
-disposable VM this plan was drafted on. Nothing described below has been built yet; treat this
-as the starting point for the next session, not a status report.
+disposable VM this plan was drafted on.
 
 ## Context
 
@@ -110,7 +117,7 @@ and throws with the offending file/`StatusMessage` if any signature comes back n
 mirrors the exact validation the disabled Gen1 script already did, just as a supported, tested
 function instead of dead code.
 
-### 5. `Public/Build-NSPAppPackage.ps1` — the Build + Package stages (local, no Graph)
+### 5. `Public/New-NSPAppPackage.ps1` — the Build + Package stages (local, no Graph)
 Params `-RepoRoot`, `-AppName` (catalog name), `-OutputPath` (defaults to git-ignored
 `Config/Local/Build/<AppName>/`). Bootstraps `IntuneWin32App` via the same
 `Import-NSPBootstrap`/`Install-NSPModule` on-demand pattern as the Graph modules (it is not a
@@ -150,7 +157,7 @@ The missing piece — nothing currently drives the run journal forward. Params `
 `-Execute`. Resolves the current app/current stage the same way `Set-NSPAppDeploymentRunStage`
 already does (current-entry/current-stage lookup), dispatches to the matching function above for
 `Create`-path stages (`ValidatePlan` re-verifies hashes haven't drifted since planning;
-`Build`→`Build-NSPAppPackage`; `Sign`→`Set-NSPAppSignature`; `Package` is folded into the `Build`
+`Build`→`New-NSPAppPackage`; `Sign`→`Set-NSPAppSignature`; `Package` is folded into the `Build`
 call's output, recorded as its own stage transition; `CreateApp`/`RecordManagementNotes`→
 `New-NSPIntuneWin32App`), wraps each in `Set-NSPAppDeploymentRunStage -Status Running` before and
 `Succeeded`/`Failed` after with the real error message on failure. For any stage belonging to
@@ -180,7 +187,7 @@ passing `-Execute` — consistent with every other write-capable path already in
   matching the existing no-mocking-Graph philosophy.
 - `Set-NSPAppSignature` gets a real (non-Graph) test: generate a throwaway self-signed
   code-signing cert in the test, sign a throwaway `.ps1`, assert `Valid`. No tenant needed.
-- `Build-NSPAppPackage`/`New-NSPIntuneWin32App`/`Register-NSPIntuneWin32AppRegistration` are
+- `New-NSPAppPackage`/`New-NSPIntuneWin32App`/`Register-NSPIntuneWin32AppRegistration` are
   **not** unit-tested (they need `IntuneWin32App`/live Graph) — verified manually against the
   test tenant instead, per the existing pattern of pushing Graph I/O to untested edges.
 

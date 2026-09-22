@@ -11,17 +11,7 @@ function Get-NSPIntuneAppInventory {
     )
 
     $scope = 'DeviceManagementApps.Read.All'
-    if ($Connect) {
-        if (-not (Get-Module -ListAvailable Microsoft.Graph.Authentication)) {
-            Import-NSPBootstrap | Out-Null
-            Install-NSPModule -Name Microsoft.Graph.Authentication -Scope CurrentUser
-        }
-        Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-        Connect-MgGraph -Scopes $scope -NoWelcome | Out-Null
-    }
-    $context = if (Get-Command Get-MgContext -ErrorAction SilentlyContinue) { Get-MgContext } else { $null }
-    if (-not $context) { throw 'No Microsoft Graph context is available. Use -Connect for delegated interactive read-only login.' }
-    if ($scope -notin @($context.Scopes)) { throw "The current Graph context lacks $scope. Reconnect with -Connect." }
+    $context = Connect-NSPGraph -Scopes $scope -Connect:$Connect
 
     $uri = 'https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps/microsoft.graph.win32LobApp?$select=id,displayName,publisher,notes,committedContentVersion,lastModifiedDateTime,publishingState'
     $apps = @(Invoke-NSPGraphCollection -Uri $uri | ForEach-Object {

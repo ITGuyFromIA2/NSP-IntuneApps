@@ -70,7 +70,7 @@ Only this repository may be edited during this effort. Downstream repositories a
 
 ## Current work
 
-The first downstream-only app wave is implemented as sanitized generic apps and generators; its remaining external step is the reviewed private Canon/HP artifact release. Disposable-machine validation for Parallels, DelegateService/SetACL, and AutoIt is now complete (see Phase 3 and [docs/TestVM.md](docs/TestVM.md)); the next development work is the reviewed deployment executor in Phase 4, plus the Parallels guided configuration generator and the engine-neutral schema-v2 runner noted under Phase 3. The exact handoff state, test evidence, and uncommitted-file warning are in [HANDOFF.md](HANDOFF.md).
+The first downstream-only app wave is implemented as sanitized generic apps and generators; its remaining external step is the reviewed private Canon/HP artifact release. Disposable-machine validation for Parallels, DelegateService/SetACL, and AutoIt is now complete (see Phase 3 and [docs/TestVM.md](docs/TestVM.md)). The Phase 4 deployment executor's Create path is now implemented and unit-tested; the next work is verifying it end to end against a real test tenant (VCred), then update-in-place/supersedence execution, plus the Parallels guided configuration generator and the engine-neutral schema-v2 runner noted under Phase 3. The exact handoff state, test evidence, and uncommitted-file warning are in [HANDOFF.md](HANDOFF.md).
 
 Vendor helper binaries follow a procurement policy rather than being copied into source. Bitdefender's vendor-published wrapper is retrieved and Authenticode-validated on the endpoint. SetACL 3.1.2 is retrieved directly from its publisher because its redistribution terms require a license when bundled; its publisher archive is SHA-256 pinned after confirming the signed x86 and x64 executable variants. DelegateService's install/detect/uninstall mechanism is functionally verified against a disposable local service and user (the SetACL grant/revoke round-tripped correctly via `sc start` access checks, not just a textual ACL listing); the real production detection target (`IntuneManagementExtension`) remains unverified since the test VM isn't Intune-enrolled. Historical ServiceUI copies are not replaced: Microsoft retired MDT in January 2026, Managed Reboots no longer needs ServiceUI, and any future legacy exception requires an explicit reviewed design. See `docs/VendorDependencyPolicy.md`.
 
@@ -120,15 +120,20 @@ The downstream Adobe variants required consolidation rather than direct copying.
 
 ### Phase 4 — Deployment engine
 
-An approved implementation plan for the "Create" path of this phase (real app creation against
-a tenant, using VCred as the proof case) is written up in
-[docs/DeploymentExecutorPlan.md](docs/DeploymentExecutorPlan.md), ready to build on a machine
-connected to the tenant that will actually be used. Update-in-place and supersedence execution
-are deliberately out of scope for that first pass.
+The "Create" path of this phase (real app creation against a tenant, using VCred as the proof
+case) is implemented per the plan in [docs/DeploymentExecutorPlan.md](docs/DeploymentExecutorPlan.md):
+`Connect-NSPGraph`, `Register-NSPIntuneWin32AppRegistration`, `Resolve-NSPAppBuildPlan`,
+`Set-NSPAppSignature`, `New-NSPAppPackage`, `New-NSPIntuneWin32App`,
+`Invoke-NSPAppDeploymentRunStage`, and the dashboard's "Advance the next stage of a saved run"
+option. All of it is unit-tested against offline fixtures and mocked Graph/`IntuneWin32App`
+calls; it has not yet been verified end to end against a real test tenant (see
+`docs/DeploymentExecutorPlan.md`'s "Verification" section for that remaining manual step).
+Update-in-place and supersedence execution remain deliberately out of scope and fail clearly
+(`PatchMetadata`, `UploadContent`, `CommitContent`, `AddSupersedence` are not yet implemented).
 
 - [x] Define stable management markers and offline action resolution.
 - [x] Compute deterministic metadata and source-content hashes while ignoring Authenticode renewal and checkout line endings.
-- [ ] Record the deterministic source hashes in Intune Notes during create/update execution.
+- [x] Record the deterministic source hashes in Intune Notes during create/update execution (create path; update path pending).
 - [x] Add read-only tenant inventory with delegated Graph login, tenant/account reporting, and an ignored local snapshot.
 - [x] Bind saved inventory JSON to the local tracker and resolve Create, NoChange, UpdateMetadataInPlace, UpdateContentInPlace, CreateSupersedingApp, AdoptOrReview, or Conflict without tenant writes.
 - [x] Connect delegated Graph discovery to the saved inventory format after tenant/account confirmation.

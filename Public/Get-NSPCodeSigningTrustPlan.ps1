@@ -25,15 +25,7 @@ function Get-NSPCodeSigningTrustPlan {
 
     $requiredScopes = if ($WriteAccess) { @('DeviceManagementConfiguration.ReadWrite.All') } else { @('DeviceManagementConfiguration.Read.All') }
     if ($AssignmentTarget -eq 'Group') { $requiredScopes += 'Group.Read.All' }
-    if ($Connect) {
-        if (-not (Get-Module -ListAvailable Microsoft.Graph.Authentication)) {
-            Import-NSPBootstrap | Out-Null
-            Install-NSPModule -Name Microsoft.Graph.Authentication -Scope CurrentUser
-        }
-        Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-        Connect-MgGraph -Scopes $requiredScopes -NoWelcome | Out-Null
-    }
-    $context = if (Get-Command Get-MgContext -ErrorAction SilentlyContinue) { Get-MgContext } else { $null }
+    $context = Connect-NSPGraph -Scopes $requiredScopes -Connect:$Connect -Optional
     $assignmentDisplayName = if ($AssignmentTarget -eq 'AllDevices') { 'All devices' } elseif ($AssignmentTarget -eq 'None') { 'No assignment' } else { $null }
     if ($context -and $AssignmentTarget -eq 'Group') {
         try {

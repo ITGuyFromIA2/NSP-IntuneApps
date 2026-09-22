@@ -37,7 +37,10 @@ function New-NSPAppDeploymentRun {
         CreateSupersedingApp = @('ValidatePlan','Build','Sign','Package','CreateApp','AddSupersedence','RecordManagementNotes')
     }
     $now = (Get-Date).ToUniversalTime().ToString('o')
-    $entries = foreach ($entry in $approved) {
+    # @() forces array semantics even for exactly one approved entry; otherwise the foreach
+    # capture collapses to the bare [ordered] hashtable, and $entries[0]/$entries.Count then
+    # mean "look up key 0" / "count of keys" instead of "first entry" / "number of entries".
+    $entries = @(foreach ($entry in $approved) {
         $stageNames = @($stageMap[[string]$entry.PlannedAction])
         if ($stageNames.Count -eq 0) { throw "Approved entry '$($entry.Name)' has unsupported action '$($entry.PlannedAction)'." }
         [ordered]@{
@@ -51,7 +54,7 @@ function New-NSPAppDeploymentRun {
                 [ordered]@{ Name=$_; Status='Pending'; Attempt=0; StartedAtUtc=$null; CompletedAtUtc=$null; Message=$null }
             })
         }
-    }
+    })
     $run = [ordered]@{
         SchemaVersion='1.0'
         RunType='Win32AppDeployment'

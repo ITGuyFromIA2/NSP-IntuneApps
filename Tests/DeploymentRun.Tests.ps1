@@ -28,6 +28,27 @@ Describe 'Resumable deployment run journal' {
         $summary.Completed | Should -Be 0
     }
 
+    It 'sets CurrentApp correctly for a plan with exactly one approved entry' {
+        # Regression test: a single-item foreach capture in New-NSPAppDeploymentRun once collapsed
+        # to a bare [ordered] hashtable instead of an array, so $entries[0] silently returned $null.
+        $singleEntryPlanPath = Join-Path $TestDrive 'single-entry-plan.json'
+        [ordered]@{
+            SchemaVersion='1.1'; PlanType='Win32AppDeployment'; SafetyMode='PlanOnly'; RepoRoot=$TestDrive
+            TenantId='00000000-0000-0000-0000-000000000001'; InventoryAccount='operator@example.test'
+            InventoryResolvedAt='2026-09-19T02:00:00Z'; Targeting=$null
+            Entries=@(
+                @{ Order=1; Name='SoloApp'; SourceId='solo-app'; DisplayName='Solo App'; PlannedAction='NoChange'; Decision='Approved'; CanExecute=$true; IntuneObjectId=$null }
+            )
+        } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $singleEntryPlanPath
+
+        New-NSPAppDeploymentRun -PlanPath $singleEntryPlanPath -OutputPath $runPath -Confirm:$false | Out-Null
+        $summary = Get-NSPAppDeploymentRunSummary -RunPath $runPath
+        $summary.CurrentApp | Should -Be 'SoloApp'
+        $summary.Total | Should -Be 1
+        $document = Get-Content -LiteralPath $runPath -Raw | ConvertFrom-Json
+        @($document.Events | Where-Object Type -eq 'RunCreated').Message | Should -Match '^1 approved app'
+    }
+
     It 'enforces app order and valid stage transitions' {
         New-NSPAppDeploymentRun -PlanPath $planPath -OutputPath $runPath -Confirm:$false | Out-Null
         { Set-NSPAppDeploymentRunStage -RunPath $runPath -AppName 'NoChangeApp' -Stage 'ValidatePlan' -Status Running -Confirm:$false } |

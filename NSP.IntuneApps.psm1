@@ -39,4 +39,9 @@ Export-ModuleMember -Function @(
     'Get-NSPCodeSigningCertificate'
     'Get-NSPCodeSigningTrustPlan'
     'Publish-NSPCodeSigningTrust'
+    'Register-NSPIntuneWin32AppRegistration'
+    'Set-NSPAppSignature'
+    'New-NSPAppPackage'
+    'New-NSPIntuneWin32App'
+    'Invoke-NSPAppDeploymentRunStage'
 )

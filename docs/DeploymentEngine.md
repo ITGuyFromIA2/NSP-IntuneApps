@@ -32,8 +32,19 @@ Side-by-side creation is reserved for a breaking contract change. The new app ma
 
 ## Execution gates
 
-The future executor must verify tenant/account, show the resolved object and assignments, require an approved tracker entry, execute one app at a time, and persist the result after each app. Metadata PATCH, content upload, assignment mutation, relationship creation, and cleanup are separate recorded operations. Cleanup of an old superseded object is never implied by deployment.
+The executor must verify tenant/account, show the resolved object and assignments, require an approved tracker entry, execute one app at a time, and persist the result after each app. Metadata PATCH, content upload, assignment mutation, relationship creation, and cleanup are separate recorded operations. Cleanup of an old superseded object is never implied by deployment.
 
 `Resolve-NSPAppDeploymentAction` implements the pure, offline decision portion of this contract. It makes no Graph calls and performs no writes.
 
 `Get-NSPIntuneAppInventory -Connect` performs delegated interactive authentication with `DeviceManagementApps.Read.All`, reads Win32 app identity/state into a local ignored JSON file, and makes no tenant changes. `Update-NSPAppDeploymentPlan` resolves that saved inventory against a tracker, allowing inventory and planning to be reviewed or repeated without holding a live Graph session.
+
+### Implemented: the Create path
+
+The `Create` action is implemented end to end, proven against `Apps/VCred` on a test tenant:
+
+- `Register-NSPIntuneWin32AppRegistration` is a one-time, plan-only-by-default tenant bootstrap. With `-Execute` it registers the `NSP-IntuneApps-Win32AppDeployment` Azure AD application, grants org-wide admin consent for the four Graph permissions `IntuneWin32App` needs, and records `Config/Local/GraphAppRegistration.json` (TenantId, ClientId; no secret, since `IntuneWin32App`'s delegated flow needs only the public ClientID).
+- `Invoke-NSPAppDeploymentRunStage -RunPath <run>` advances a run journal by exactly one stage, plan-only by default. With `-Execute` it dispatches: `ValidatePlan` (re-verifies the source hashes haven't drifted since planning), `Build`/`Sign` (`New-NSPAppPackage`/`Set-NSPAppSignature`, both local/offline), `Package` (a no-op — the package already exists from the `Build` stage; `Package` is not adjacent to `Build` in the stage list, since `Sign` sits between them), `CreateApp` (`New-NSPIntuneWin32App`, the one function that writes to the tenant — it creates the Win32 app via `IntuneWin32App`'s own delegated session, then immediately PATCHes the deterministic `ManagementNotes` block via a separate `Microsoft.Graph.Authentication` session), and `RecordManagementNotes` (a no-op — the PATCH already happened as part of `CreateApp`).
+- Stages belonging to `UpdateMetadataInPlace`, `UpdateContentInPlace`, or `CreateSupersedingApp` (`PatchMetadata`, `UploadContent`, `CommitContent`, `AddSupersedence`) fail immediately with an explicit "not yet implemented in this executor" message rather than being guessed at. This is the current boundary of the executor, not a silent gap.
+- No assignment is created by any of the above; assignment remains a separate reviewed operation, matching the existing `AssignmentColl` preflight rule.
+
+`Start-NSPIntuneApps.ps1`'s dashboard exposes this as "Advance the next stage of a saved run": it always previews the next app/stage first and only passes `-Execute` after an explicit `[Y/N]` confirmation.
