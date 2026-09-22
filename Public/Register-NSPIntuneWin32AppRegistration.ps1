@@ -68,7 +68,7 @@ function Register-NSPIntuneWin32AppRegistration {
             if (@($missingRedirectUris).Count -gt 0) {
                 if (-not $Execute) {
                     return [pscustomobject]@{
-                        Status       = 'AlreadyRegistered'
+                        Status       = 'NeedsRedirectUriRepair'
                         TenantId     = [string]$record.TenantId
                         TenantDomain = $tenantDomain
                         ClientId     = [string]$record.ClientId
