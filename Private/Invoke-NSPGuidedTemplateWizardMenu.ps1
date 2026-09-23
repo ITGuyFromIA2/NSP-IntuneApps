@@ -22,7 +22,8 @@ function Invoke-NSPGuidedTemplateWizardMenu {
     Write-Host '[G] Adobe Acrobat / Reader package'
     Write-Host '[H] Managed Reboots policy'
     Write-Host '[I] Parallels RAS Client connection'
-    $template = Read-NSPMenuChoice -Prompt 'Template' -Allowed @('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I') -Default 'A'
+    Write-Host '[J] FortiClient SuperScript (already-built, from NSP-FGTIPSecTools)'
+    $template = Read-NSPMenuChoice -Prompt 'Template' -Allowed @('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J') -Default 'A'
     switch ($template) {
         'A' { New-NSPDriveMapApp -RepoRoot $RepoRoot -Interactive }
         'B' { New-NSPRdpApp -RepoRoot $RepoRoot -Interactive }
@@ -38,5 +39,6 @@ function Invoke-NSPGuidedTemplateWizardMenu {
         'G' { New-NSPAdobeApp -RepoRoot $RepoRoot -Interactive }
         'H' { New-NSPManagedRebootsApp -RepoRoot $RepoRoot -Interactive }
         'I' { New-NSPParallelsClientApp -RepoRoot $RepoRoot -Interactive }
+        'J' { New-NSPFortiClientSuperScriptApp -RepoRoot $RepoRoot -Interactive }
     }
 }
