@@ -84,6 +84,26 @@ Describe 'New-NSPInteractiveInstallerRunner' {
         $script | Should -Match 'ControlClick\("Setup", "", "\[ID:1200\]"\)'
     }
 
+    It 'omits process tracking by default' {
+        $outputPath = Join-Path $TestDrive 'NoTracking.au3'
+        New-NSPInteractiveInstallerRunner -CapturePath (Join-Path $examplesRoot 'InstallShield.MultiScreen.example.json') -OutputPath $outputPath -Confirm:$false | Out-Null
+        $script = Get-Content -LiteralPath $outputPath -Raw
+
+        $script | Should -Not -Match 'Run\('
+        $script | Should -Not -Match 'ProcessExists'
+    }
+
+    It 'launches and tracks the installer process when -InstallerExecutablePath is given' {
+        $outputPath = Join-Path $TestDrive 'Tracking.au3'
+        New-NSPInteractiveInstallerRunner -CapturePath (Join-Path $examplesRoot 'InstallShield.MultiScreen.example.json') -OutputPath $outputPath -InstallerExecutablePath 'C:\Temp\ExampleSetup.exe' -Confirm:$false | Out-Null
+        $script = Get-Content -LiteralPath $outputPath -Raw
+
+        $script | Should -Match 'Local \$NSPInstallerPid = Run\("C:\\Temp\\ExampleSetup\.exe"\)'
+        $script | Should -Match 'If Not ProcessExists\(\$NSPInstallerPid\) Then'
+        $script | Should -Match 'Step 1: installer process is no longer running\.'
+        $script | Should -Match 'Step 2: installer process is no longer running\.'
+    }
+
     It 'throws for a capture that fails schema validation' {
         $capturePath = Join-Path $TestDrive 'invalid.json'
         '{ "SchemaVersion": "1.0" }' | Set-Content -LiteralPath $capturePath

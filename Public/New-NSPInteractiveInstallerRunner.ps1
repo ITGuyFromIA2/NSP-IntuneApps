@@ -25,6 +25,14 @@ function New-NSPInteractiveInstallerRunner {
         NSP_RUNTIMEPARAM_<Name> at runtime, never embedded in the generated script, so a
         Sensitive parameter's value never appears in the .au3 source this function writes.
 
+        Pass -InstallerExecutablePath to have the generated script launch the installer itself
+        and track its PID, checking with ProcessExists before every step - a crashed or already-
+        exited installer then fails clearly ("installer process is no longer running") instead of
+        surfacing as a generic window-not-found timeout on whatever step happens to run next.
+        This is the "runtime process validation" PLAN.md calls for; without this parameter the
+        generated script assumes the installer is already running (launched externally) and
+        skips this check entirely, matching prior behavior.
+
         IMPORTANT: the emitted .au3 script is NOT validated against any real installer or AutoIt
         runtime by this function - it cannot be, since generating code and executing GUI
         automation are different problems, and this repo's own disposable-VM sessions found
@@ -37,6 +45,7 @@ function New-NSPInteractiveInstallerRunner {
     param(
         [Parameter(Mandatory)][string]$CapturePath,
         [Parameter(Mandatory)][string]$OutputPath,
+        [string]$InstallerExecutablePath,
         [switch]$Force
     )
 
@@ -87,6 +96,19 @@ function New-NSPInteractiveInstallerRunner {
         $lines.Add('')
     }
 
+    $trackProcess = [bool]$InstallerExecutablePath
+    if ($trackProcess) {
+        $lines.Add('; Launch the installer and track its PID so every step below can confirm it is')
+        $lines.Add('; still running before waiting on a window - a crashed/already-exited installer')
+        $lines.Add('; then fails clearly instead of surfacing as a generic window-not-found timeout.')
+        $lines.Add("Local `$NSPInstallerPid = Run($(& $escapeAutoIt $InstallerExecutablePath))")
+        $lines.Add('If @error Then')
+        $lines.Add('    ConsoleWrite("Failed to launch the installer." & @CRLF)')
+        $lines.Add('    Exit 1')
+        $lines.Add('EndIf')
+        $lines.Add('')
+    }
+
     foreach ($step in @($capture.Steps | Sort-Object Order)) {
         $winTitle = & $escapeAutoIt $step.Window.Title
         $winText = & $escapeAutoIt $step.Window.Text
@@ -109,6 +131,12 @@ function New-NSPInteractiveInstallerRunner {
         }
 
         $lines.Add("; Step $($step.Order): $($step.Note)")
+        if ($trackProcess) {
+            $lines.Add('If Not ProcessExists($NSPInstallerPid) Then')
+            $lines.Add("    ConsoleWrite(`"Step $($step.Order): installer process is no longer running.`" & @CRLF)")
+            $lines.Add('    Exit 1')
+            $lines.Add('EndIf')
+        }
         $lines.Add("Opt(`"WinTitleMatchMode`", $matchMode)")
 
         switch ($step.Action) {
