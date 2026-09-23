@@ -21,6 +21,7 @@
         'New-NSPAdobeApp'
         'New-NSPManagedRebootsApp'
         'New-NSPFortiClientVpnConfigApp'
+        'New-NSPParallelsClientApp'
         'New-NSPRdpApp'
         'New-NSPShortcutApp'
         'New-NSPPrinterApp'

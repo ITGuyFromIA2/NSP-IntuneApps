@@ -21,7 +21,8 @@ function Invoke-NSPGuidedTemplateWizardMenu {
     Write-Host '[F] Web / file shortcut'
     Write-Host '[G] Adobe Acrobat / Reader package'
     Write-Host '[H] Managed Reboots policy'
-    $template = Read-NSPMenuChoice -Prompt 'Template' -Allowed @('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H') -Default 'A'
+    Write-Host '[I] Parallels RAS Client connection'
+    $template = Read-NSPMenuChoice -Prompt 'Template' -Allowed @('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I') -Default 'A'
     switch ($template) {
         'A' { New-NSPDriveMapApp -RepoRoot $RepoRoot -Interactive }
         'B' { New-NSPRdpApp -RepoRoot $RepoRoot -Interactive }
@@ -36,5 +37,6 @@ function Invoke-NSPGuidedTemplateWizardMenu {
         'F' { New-NSPShortcutApp -RepoRoot $RepoRoot -Interactive }
         'G' { New-NSPAdobeApp -RepoRoot $RepoRoot -Interactive }
         'H' { New-NSPManagedRebootsApp -RepoRoot $RepoRoot -Interactive }
+        'I' { New-NSPParallelsClientApp -RepoRoot $RepoRoot -Interactive }
     }
 }

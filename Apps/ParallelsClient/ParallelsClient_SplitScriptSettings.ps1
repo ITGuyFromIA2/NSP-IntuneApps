@@ -74,7 +74,7 @@ $VariableConfig.PoSH.Sign_SourceFilter = "*.ps1"
 $VariableConfig.SetupFile_Filter = "Download*.ps1"
 $VariableConfig.PoSH.UninstallFile_Filter = "Uninstall*.ps1"
 
-$VariableCOnfig.EnforceSignature_Detection = $True
+$VariableConfig.EnforceSignature_Detection = $True
 $VariableConfig.RunAs32Bit_Detection = $False
 
 
