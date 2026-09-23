@@ -50,6 +50,28 @@ Describe 'New-NSPIntuneAssignmentFilter' {
         }
     }
 
+    It 'throws when Graph returns an error payload without actually throwing (a real tenant 400 for an invalid rule)' {
+        # Invoke-MgGraphRequest does not reliably raise a terminating error for every non-2xx
+        # response - observed against a real tenant, where a 400 for an unsupported operator
+        # surfaced only as a displayed, non-terminating error while the deserialized Graph error
+        # payload came back as the mocked "success" value. This must not report Status 'Created'.
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest {
+            [pscustomobject]@{ error = [pscustomobject]@{ code = 'BadRequest'; message = "Invalid assignment filter rule: (device.deviceOwnership -in [`"Corporate`"])" } }
+        } -ModuleName NSP.IntuneApps
+
+        { New-NSPIntuneAssignmentFilter -DisplayName 'Windows - Corporate' -Platform 'windows10AndLater' -Clauses @(@{ Property = 'device.deviceOwnership'; Operator = 'in'; Value = @('Corporate') }) -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false } |
+            Should -Throw '*Graph rejected the assignment filter*Invalid assignment filter rule*'
+    }
+
+    It 'throws when the response has no id and no error, rather than reporting Created' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest { $null } -ModuleName NSP.IntuneApps
+
+        { New-NSPIntuneAssignmentFilter -DisplayName 'Corporate Windows' -Platform 'windows10AndLater' -Clauses @(@{ Property = 'device.deviceOwnership'; Operator = 'eq'; Value = 'Corporate' }) -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false } |
+            Should -Throw '*did not return a created filter object*'
+    }
+
     It 'creates nothing under -WhatIf' {
         Mock Connect-NSPGraph { throw 'should not be called' } -ModuleName NSP.IntuneApps
         Mock Invoke-MgGraphRequest { throw 'should not be called' } -ModuleName NSP.IntuneApps

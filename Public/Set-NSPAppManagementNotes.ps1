@@ -35,9 +35,15 @@ function Set-NSPAppManagementNotes {
 
     $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
     $registration = if (Test-Path -LiteralPath $registrationPath) { Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json } else { $null }
-    $graphContext = Connect-NSPGraph -Scopes 'DeviceManagementApps.ReadWrite.All' -Connect -ClientId ([string]$registration.ClientId) -TenantId ([string]$registration.TenantId)
+    $graphContext = Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect -ClientId ([string]$registration.ClientId) -TenantId ([string]$registration.TenantId)
     $patchBody = @{ '@odata.type' = '#microsoft.graph.win32LobApp'; notes = $sourceState.ManagementNotes } | ConvertTo-Json
-    Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps/$IntuneObjectId" -Body $patchBody -ContentType 'application/json' -ErrorAction Stop | Out-Null
+    $patchResult = Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps/$IntuneObjectId" -Body $patchBody -ContentType 'application/json' -ErrorAction Stop
+    # Invoke-MgGraphRequest does not reliably throw a terminating error for every non-2xx
+    # response - a successful PATCH returns no body ($null), so a non-$null response with an
+    # 'error' property means Graph rejected the write despite -ErrorAction Stop not stopping it.
+    if ($patchResult -and $patchResult.PSObject.Properties['error']) {
+        throw "Graph rejected the management-notes PATCH for '$AppName' ($IntuneObjectId): $($patchResult.error.message)"
+    }
 
     [pscustomobject]@{
         Status          = 'Recorded'

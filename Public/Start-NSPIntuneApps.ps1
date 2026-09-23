@@ -22,13 +22,17 @@ function Start-NSPIntuneApps {
             $latestPlan = $savedPlans[0]
             "Trackers: $($savedPlans.Count) saved | latest: $($latestPlan.Approved) approved, $($latestPlan.Skipped) skipped, $($latestPlan.Pending) pending, $($latestPlan.AttentionRequired) attention"
         }
+        $graphContext = if (Get-Command Get-MgContext -ErrorAction SilentlyContinue) { Get-MgContext } else { $null }
+        $graphStatus = if ($graphContext) { "Graph: connected as $($graphContext.Account) | tenant $($graphContext.TenantId)" } else { 'Graph: not connected - [0] to sign in' }
         Write-NSPDashboardHeader -Title 'NSP IntuneApps' -StatusLines @(
             "Preflight: $(if ($preflight.Passed) { 'READY' } else { 'ATTENTION REQUIRED' })"
             "Catalog: $(@($catalog | Where-Object Classification -eq 'Deployable').Count) deployable | $(@($catalog | Where-Object Classification -eq 'RequiresConfiguration').Count) needs setup | $(@($catalog | Where-Object Classification -eq 'RequiresRepair').Count) needs repair | $(@($catalog | Where-Object Classification -eq 'Legacy').Count) legacy | $(@($catalog | Where-Object Classification -like 'Retired*').Count) retired | $(@($catalog | Where-Object Classification -eq 'Blocked').Count) blocked"
             'Safety: discovery and plans are read-only; execution is always explicit'
             $planStatus
             "Runs: $($savedRuns.Count) saved | $(@($savedRuns | Where-Object Status -eq 'AttentionRequired').Count) need attention"
+            $graphStatus
         )
+        Write-Host '  [0] Manage the Graph connection (sign in once, sign out)' -ForegroundColor DarkGray
         Write-Host '--- Discover & build ---' -ForegroundColor DarkCyan
         Write-Host '  [1] Preflight details'
         Write-Host '  [2] App catalog'
@@ -53,9 +57,53 @@ function Start-NSPIntuneApps {
         Write-Host '  [17] Review and retire superseded apps (separate, explicitly approved)' -ForegroundColor Red
         Write-Host ''
         Write-Host '  [Q] Quit'
-        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','Q')
+        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','Q')
+
+        if ($choice -ne 'Q') {
+            $actionTitles = @{
+                '0' = 'Manage the Graph connection'; '1' = 'Preflight details'; '2' = 'App catalog'
+                '3' = 'Create from a guided template'; '4' = 'Code-signing certificate status'
+                '5' = 'Plan certificate trust upload'; '6' = 'Create/review an app deployment tracker'
+                '7' = 'Save a read-only Intune app inventory'; '8' = 'Resume a saved deployment tracker'
+                '9' = 'View resumable deployment run journals'; '10' = 'Advance the next stage of a saved run'
+                '11' = 'Register/verify the tenant app registration'; '12' = 'Delete an existing Intune app'
+                '13' = 'Save a read-only app assignment and filter inventory'
+                '14' = 'Assign an app to a group'; '15' = 'Build and create an assignment filter'
+                '16' = 'Manage master assignment groups'; '17' = 'Review and retire superseded apps'
+            }
+            Write-NSPDashboardHeader -Title $actionTitles[$choice] -StatusLines @($graphStatus)
+        }
 
         switch ($choice) {
+            '0' {
+                if ($graphContext) {
+                    Write-Host "Connected as $($graphContext.Account)" -ForegroundColor Cyan
+                    Write-Host "Tenant: $($graphContext.TenantId)" -ForegroundColor Cyan
+                    Write-Host "App (ClientId): $($graphContext.ClientId)" -ForegroundColor Cyan
+                    Write-Host "Scopes: $($graphContext.Scopes -join ', ')" -ForegroundColor DarkGray
+                } else {
+                    Write-Host 'Not connected to Microsoft Graph.' -ForegroundColor Yellow
+                }
+                Write-Host ''
+                if ($graphContext) { Write-Host '  [D] Disconnect' }
+                else { Write-Host '  [C] Connect now (requests every scope this tool uses, one time)' }
+                Write-Host '  [N] No change'
+                $graphAllowed = if ($graphContext) { @('D', 'N') } else { @('C', 'N') }
+                $graphChoice = Read-NSPMenuChoice -Prompt 'Action' -Allowed $graphAllowed -Default 'N'
+                if ($graphChoice -eq 'C') {
+                    $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+                    if (-not (Test-Path -LiteralPath $registrationPath)) {
+                        Write-Warning 'No tenant app registration is recorded. Use [11] first.'
+                    } else {
+                        $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+                        Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect -ClientId $registration.ClientId -TenantId $registration.TenantId | Out-Null
+                        Write-Host 'Connected.' -ForegroundColor Green
+                    }
+                } elseif ($graphChoice -eq 'D') {
+                    Disconnect-MgGraph | Out-Null
+                    Write-Host 'Disconnected.' -ForegroundColor Yellow
+                }
+            }
             '1' {
                 $preflight.Results | Format-Table Area, Name, Status, Detail -AutoSize
                 if ($preflight.SyntaxErrors) { $preflight.SyntaxErrors | Format-Table File, Line, Message -Wrap }
@@ -412,6 +460,7 @@ function Start-NSPIntuneApps {
                     $clauses = [Collections.Generic.List[object]]::new()
                     do {
                         Write-Host ("=== Clause {0} ===" -f ($clauses.Count + 1)) -ForegroundColor Cyan
+                        Write-NSPFilterEquationBreadcrumb -OuterClauses @($clauses) -CurrentPlaceholder "Clause$($clauses.Count + 1)"
                         Write-Host '  [P] Single property clause'
                         Write-Host '  [G] Group of clauses joined by OR (e.g. manufacturer is Dell OR HP)'
                         $clauseKind = Read-NSPMenuChoice -Prompt 'Clause type' -Allowed @('P', 'G') -Default 'P'
@@ -419,6 +468,7 @@ function Start-NSPIntuneApps {
                             $groupClauses = [Collections.Generic.List[object]]::new()
                             do {
                                 Write-Host ("--- OR-group clause {0} ---" -f ($groupClauses.Count + 1)) -ForegroundColor DarkCyan
+                                Write-NSPFilterEquationBreadcrumb -OuterClauses @($clauses) -CurrentGroupClauses @($groupClauses) -CurrentGroupOperator 'or' -CurrentPlaceholder "SubClause$($groupClauses.Count + 1)"
                                 $groupClauses.Add((Read-NSPFilterClause -TenantId $registration.TenantId -ClientId $registration.ClientId -Platform $platform))
                                 $addAnotherInGroup = Read-NSPMenuChoice -Prompt 'Add another clause to this OR-group? [Y/N]' -Allowed @('Y', 'N') -Default 'N'
                             } while ($addAnotherInGroup -eq 'Y')
@@ -427,6 +477,7 @@ function Start-NSPIntuneApps {
                             $clauses.Add((Read-NSPFilterClause -TenantId $registration.TenantId -ClientId $registration.ClientId -Platform $platform))
                         }
 
+                        Write-NSPFilterEquationBreadcrumb -OuterClauses @($clauses) -CurrentPlaceholder "Clause$($clauses.Count + 1)"
                         $addAnother = Read-NSPMenuChoice -Prompt 'Add another clause (joined with AND)? [Y/N]' -Allowed @('Y', 'N') -Default 'N'
                     } while ($addAnother -eq 'Y')
 

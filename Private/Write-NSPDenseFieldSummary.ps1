@@ -30,7 +30,9 @@ function Write-NSPDenseFieldSummary {
 
     $maxLabelLen = ($rows | ForEach-Object { [string]$_.Label } | Measure-Object -Property Length -Maximum).Maximum
     if (-not $maxLabelLen) { $maxLabelLen = 20 }
-    $layout = Get-NSPDenseColumnLayout -ConsoleWidth $consoleWidth -MaxLabelLen $maxLabelLen
+    $maxValueLen = ($rows | ForEach-Object { "$($_.Value)".Length } | Measure-Object -Maximum).Maximum
+    if (-not $maxValueLen) { $maxValueLen = 18 }
+    $layout = Get-NSPDenseColumnLayout -ConsoleWidth $consoleWidth -MaxLabelLen $maxLabelLen -MaxValueLen $maxValueLen
 
     $pending = [Collections.Generic.List[string]]::new()
     $flushRow = {

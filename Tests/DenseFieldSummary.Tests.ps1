@@ -32,6 +32,26 @@ Describe 'Write-NSPDenseFieldSummary' {
         Should -Invoke Write-Host -ModuleName NSP.IntuneApps -ParameterFilter { $Object -match '\.\.' }
     }
 
+    It 'stops truncating a value that fits within the 40-char cap, and truncates less than before for one that does not' {
+        # Regression for a real report: TenantId/Account/OutputPath packed into too many columns
+        # rendered as "fb279fdc-8913-4359-b94b-fa.." and "BobLoblaw@BobLoblawLawFirm..". A 36-char
+        # GUID now fits fully under the fix; a 43-char email is still capped at 40 chars (a
+        # deliberate ceiling, not a regression) but shows far more than the ~28 chars it used to.
+        Mock Write-Host { } -ModuleName NSP.IntuneApps
+        InModuleScope NSP.IntuneApps {
+            Write-NSPDenseFieldSummary -Rows @(
+                @{ Label = 'TenantId'; Value = 'fb279fdc-8913-4359-b94b-facfbd174307' }
+                @{ Label = 'Account'; Value = 'BobLoblaw@BobLoblawLawFirm.onmicrosoft.com' }
+                @{ Label = 'AppCount'; Value = 4 }
+                @{ Label = 'AssignmentCount'; Value = 0 }
+                @{ Label = 'FilterCount'; Value = 0 }
+                @{ Label = 'OutputPath'; Value = 'C:\GitRepo\NSP-TestIntuneApps\.nsp-intuneapps\assignment-inventory\assignments-fb279fdc-20260923-095012.json' }
+            )
+        }
+        Should -Invoke Write-Host -ModuleName NSP.IntuneApps -ParameterFilter { $Object -match 'fb279fdc-8913-4359-b94b-facfbd174307' }
+        Should -Invoke Write-Host -ModuleName NSP.IntuneApps -ParameterFilter { $Object -match 'BobLoblaw@BobLoblawLawFirm\.onmicrosoft' }
+    }
+
     It 'builds rows from an InputObject''s own properties' {
         Mock Write-Host { } -ModuleName NSP.IntuneApps
         InModuleScope NSP.IntuneApps {

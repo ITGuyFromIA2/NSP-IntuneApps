@@ -40,4 +40,33 @@ Describe 'Get-NSPDenseColumnLayout' {
             $layout.RuleWidth | Should -BeLessOrEqual (90 - 3)
         }
     }
+
+    It 'settles on fewer columns when the actual values are long (GUIDs/emails), not just the labels' {
+        InModuleScope NSP.IntuneApps {
+            # Short labels (TenantId, Account) but 36+ char GUID/email values: on a wide console
+            # that could otherwise fit 3-4 short-labeled columns, long values should still pull
+            # the layout down to fewer, wider columns instead of truncating every one of them.
+            $wide = Get-NSPDenseColumnLayout -ConsoleWidth 200 -MaxLabelLen 10 -MaxValueLen 8
+            $narrow = Get-NSPDenseColumnLayout -ConsoleWidth 200 -MaxLabelLen 10 -MaxValueLen 36
+
+            $narrow.Cols | Should -BeLessThan $wide.Cols
+            $narrow.ValWidth | Should -BeGreaterThan $wide.ValWidth
+        }
+    }
+
+    It 'defaults MaxValueLen to a short value when not specified, preserving prior label-only behavior' {
+        InModuleScope NSP.IntuneApps {
+            $withDefault = Get-NSPDenseColumnLayout -ConsoleWidth 120 -MaxLabelLen 14
+            $withExplicitShort = Get-NSPDenseColumnLayout -ConsoleWidth 120 -MaxLabelLen 14 -MaxValueLen 18
+            $withDefault.Cols | Should -Be $withExplicitShort.Cols
+            $withDefault.ValWidth | Should -Be $withExplicitShort.ValWidth
+        }
+    }
+
+    It 'caps the value-driven minimum at 40, same as the existing value-width ceiling' {
+        InModuleScope NSP.IntuneApps {
+            $layout = Get-NSPDenseColumnLayout -ConsoleWidth 300 -MaxLabelLen 10 -MaxValueLen 500
+            $layout.ValWidth | Should -BeLessOrEqual 40
+        }
+    }
 }

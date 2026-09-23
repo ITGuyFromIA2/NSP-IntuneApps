@@ -10,14 +10,14 @@ function Get-NSPIntuneAppInventory {
         [switch]$Connect
     )
 
-    # ReadWrite.All (not Read.All) deliberately matches the scope every other stage of this
-    # workflow (notes PATCH, content update) already needs. MSAL treats a different scope
-    # string as a new consent and reprompts even mid-session, so using one shared scope
-    # across the whole deployment flow is what lets a single login cover all of it.
-    $scope = 'DeviceManagementApps.ReadWrite.All'
+    # Requesting the full routine scope set (not just this call's own narrower need)
+    # deliberately matches every other stage of this workflow. MSAL treats a different scope
+    # string as a new consent and reprompts even mid-session, so using one shared scope set
+    # across every routine call is what lets a single login cover all of it, regardless of
+    # which action in the dashboard happens to run first.
     $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
     $registration = if (Test-Path -LiteralPath $registrationPath) { Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json } else { $null }
-    $context = Connect-NSPGraph -Scopes $scope -Connect:$Connect -ClientId ([string]$registration.ClientId) -TenantId ([string]$registration.TenantId)
+    $context = Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect:$Connect -ClientId ([string]$registration.ClientId) -TenantId ([string]$registration.TenantId)
 
     $uri = "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps?`$filter=isof('microsoft.graph.win32LobApp')&`$select=id,displayName,publisher,notes,lastModifiedDateTime,publishingState,microsoft.graph.win32LobApp/committedContentVersion"
     $apps = @(Invoke-NSPGraphCollection -Uri $uri | ForEach-Object {

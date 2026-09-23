@@ -10,18 +10,25 @@ function Get-NSPDenseColumnLayout {
         unit-testable function with zero FortiGate-specific logic, so it ports verbatim.
 
         Prefers MORE columns (less scrolling) but never so many that a column's value area drops
-        below $minVal; a narrow (~80-col) window falls back to a single wide column.
+        below $minVal; a narrow (~80-col) window falls back to a single wide column. -MaxValueLen
+        (the longest actual value being shown, not just the longest label) raises $minVal so a
+        screen full of GUIDs/emails/paths settles on fewer, wider columns instead of packing in
+        more columns and truncating every one of them - the original port only sized columns off
+        label length, which looked fine for short field names but truncated real tenant/account
+        values (a 36-character GUID, a 30+ character email) far more than necessary once real
+        data was tried against it.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][int]$ConsoleWidth,
-        [Parameter(Mandatory)][int]$MaxLabelLen
+        [Parameter(Mandatory)][int]$MaxLabelLen,
+        [int]$MaxValueLen = 18
     )
     $labelWidth = [Math]::Min([Math]::Max($MaxLabelLen, 14), 30)
     $cellFixed  = $labelWidth + 6          # "{0,3}. " (5) + label + " " (1)
     $gutter     = 3
-    $minVal     = 18                        # below this a column isn't worth having - use fewer, wider ones
     $maxVal     = 40
+    $minVal     = [Math]::Max(18, [Math]::Min($MaxValueLen, $maxVal)) # below this a column isn't worth having - use fewer, wider ones
     $avail      = $ConsoleWidth - 2 - 1     # 2 leading spaces, 1 safety vs. edge auto-wrap
 
     $cols = 1

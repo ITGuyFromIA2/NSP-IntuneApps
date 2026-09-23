@@ -19,7 +19,7 @@ function Get-NSPIntuneEnrollmentProfileNames {
         [Parameter(Mandatory)][string]$ClientId
     )
 
-    Connect-NSPGraph -Scopes 'DeviceManagementServiceConfig.ReadWrite.All' -Connect -ClientId $ClientId -TenantId $TenantId | Out-Null
+    Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect -ClientId $ClientId -TenantId $TenantId | Out-Null
 
     $profiles = [Collections.Generic.List[object]]::new()
 

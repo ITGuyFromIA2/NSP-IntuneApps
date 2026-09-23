@@ -52,6 +52,17 @@ $VariableConfig.REQ_MinWindowsRelase = 'W10_1607'
         }
     }
 
+    It 'throws when Graph returns an error payload without actually throwing' {
+        $repoRoot = Join-Path $TestDrive 'ErrorPayload'
+        New-FixtureRepo -Root $repoRoot
+
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest { [pscustomobject]@{ error = [pscustomobject]@{ code = 'BadRequest'; message = 'Something was rejected.' } } } -ModuleName NSP.IntuneApps
+
+        { Set-NSPAppManagementNotes -RepoRoot $repoRoot -AppName 'Fixture' -IntuneObjectId 'intune-app-1' -Execute -Confirm:$false } |
+            Should -Throw '*Graph rejected the management-notes PATCH*Something was rejected*'
+    }
+
     It 'patches nothing under -WhatIf' {
         $repoRoot = Join-Path $TestDrive 'WhatIf'
         New-FixtureRepo -Root $repoRoot

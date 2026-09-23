@@ -20,8 +20,7 @@ function Get-NSPIntuneAppRetirementCandidates {
 
     $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
     $registration = if (Test-Path -LiteralPath $registrationPath) { Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json } else { $null }
-    $scope = 'DeviceManagementApps.ReadWrite.All'
-    $context = Connect-NSPGraph -Scopes $scope -Connect:$Connect -ClientId ([string]$registration.ClientId) -TenantId ([string]$registration.TenantId)
+    $context = Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect:$Connect -ClientId ([string]$registration.ClientId) -TenantId ([string]$registration.TenantId)
 
     $appsUri = "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps?`$filter=isof('microsoft.graph.win32LobApp')&`$select=id,displayName,notes"
     $apps = @(Invoke-NSPGraphCollection -Uri $appsUri)

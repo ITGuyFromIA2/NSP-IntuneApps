@@ -39,8 +39,7 @@ function New-NSPIntuneAssignmentFilter {
 
     if (-not $PSCmdlet.ShouldProcess("tenant $TenantId", "Create assignment filter '$DisplayName' ($Platform): $resolvedRule")) { return }
 
-    $registrationScope = 'DeviceManagementConfiguration.ReadWrite.All'
-    $graphContext = Connect-NSPGraph -Scopes $registrationScope -Connect -ClientId $ClientId -TenantId $TenantId
+    $graphContext = Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect -ClientId $ClientId -TenantId $TenantId
     $body = @{
         displayName                    = $DisplayName
         platform                       = $Platform
@@ -48,6 +47,17 @@ function New-NSPIntuneAssignmentFilter {
         assignmentFilterManagementType = $ManagementType
     } | ConvertTo-Json
     $result = Invoke-MgGraphRequest -Method POST -Uri 'https://graph.microsoft.com/beta/deviceManagement/assignmentFilters' -Body $body -ContentType 'application/json' -ErrorAction Stop
+    # Invoke-MgGraphRequest does not reliably throw a terminating error for every non-2xx
+    # response (observed against a real tenant: a 400 for an invalid rule surfaced only as a
+    # displayed, non-terminating error, while $result held the deserialized Graph error payload
+    # - which has no 'id', so trusting -ErrorAction Stop alone silently reported Status
+    # 'Created' with a blank Id). Treat a Graph error payload or a missing id as fatal instead.
+    if ($result -and $result.PSObject.Properties['error']) {
+        throw "Graph rejected the assignment filter '$DisplayName': $($result.error.message)"
+    }
+    if (-not $result -or -not $result.id) {
+        throw "Assignment filter creation for '$DisplayName' did not return a created filter object. Response: $($result | ConvertTo-Json -Depth 5 -Compress)"
+    }
 
     [pscustomobject]@{
         Status      = 'Created'

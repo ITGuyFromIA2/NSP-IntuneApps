@@ -19,7 +19,7 @@ function Find-NSPIntuneGroup {
         [int]$MaxResults = 25
     )
 
-    Connect-NSPGraph -Scopes 'Group.Read.All' -Connect -ClientId $ClientId -TenantId $TenantId | Out-Null
+    Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect -ClientId $ClientId -TenantId $TenantId | Out-Null
 
     $queryParts = [Collections.Generic.List[string]]::new()
     if (-not [string]::IsNullOrWhiteSpace($NameContains)) {

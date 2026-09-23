@@ -109,6 +109,23 @@ $VariableConfig.RunAs32Bit_Detection = $false
         }
     }
 
+    It 'throws when Graph returns an error payload for the notes PATCH without actually throwing' -Skip:(-not $script:intuneWin32AppAvailable) {
+        $repoRoot = Join-Path $TestDrive 'NotesErrorPayload'
+        New-FixtureRepo -Root $repoRoot
+        $packagePath = Join-Path $repoRoot 'Fixture.intunewin'
+        New-Item -ItemType File -Path $packagePath -Force | Out-Null
+
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppDetectionRuleScript { [ordered]@{ '@odata.type' = 'fake.detectionRule' } } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppRequirementRule { [ordered]@{ '@odata.type' = 'fake.requirementRule' } } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32App { [pscustomobject]@{ id = 'intune-app-1' } } -ModuleName NSP.IntuneApps
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest { [pscustomobject]@{ error = [pscustomobject]@{ code = 'BadRequest'; message = 'Notes were rejected.' } } } -ModuleName NSP.IntuneApps
+
+        { New-NSPIntuneWin32App -RepoRoot $repoRoot -AppName 'Fixture' -PackagePath $packagePath -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false } |
+            Should -Throw '*Graph rejected the management-notes PATCH*Notes were rejected*'
+    }
+
     It 'throws instead of patching notes when the second Graph session lands in the wrong tenant' -Skip:(-not $script:intuneWin32AppAvailable) {
         $repoRoot = Join-Path $TestDrive 'TenantMismatch'
         New-FixtureRepo -Root $repoRoot
