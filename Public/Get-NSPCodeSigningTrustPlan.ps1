@@ -2,12 +2,23 @@ function Get-NSPCodeSigningTrustPlan {
     <#
     .SYNOPSIS
         Produces a read-only plan for the combined NSP code-signing trust profile.
+    .DESCRIPTION
+        -ClientId/-TenantId are threaded through to Connect-NSPGraph like every other routine
+        function here - omitting them (as this function used to) makes Connect-NSPGraph's own
+        app-match check a no-op ("-not $ClientId" is always true when $ClientId is unset), so a
+        Connect-MgGraph call from here would silently authenticate as the Microsoft Graph
+        PowerShell SDK's own default app instead of the registered one. Any later action that
+        correctly requests the registered app then sees a different ClientId on the existing
+        context and force-reconnects - a real, previously-unaudited source of unexpected mid-
+        session reconnect prompts, not the scope-list class of bug fixed elsewhere in this repo.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$RepoRoot,
         [ValidateSet('AllDevices','Group','None')][string]$AssignmentTarget = 'AllDevices',
         [string]$GroupId,
+        [Parameter(Mandatory)][string]$TenantId,
+        [Parameter(Mandatory)][string]$ClientId,
         [switch]$Connect
     )
 
@@ -27,7 +38,7 @@ function Get-NSPCodeSigningTrustPlan {
     # when it runs alongside others that already requested the full set - see
     # Get-NSPGraphRoutineScopes for why a different scope string reprompts even mid-session.
     $requiredScopes = Get-NSPGraphRoutineScopes
-    $context = Connect-NSPGraph -Scopes $requiredScopes -Connect:$Connect -Optional
+    $context = Connect-NSPGraph -Scopes $requiredScopes -Connect:$Connect -ClientId $ClientId -TenantId $TenantId -Optional
     $assignmentDisplayName = if ($AssignmentTarget -eq 'AllDevices') { 'All devices' } elseif ($AssignmentTarget -eq 'None') { 'No assignment' } else { $null }
     if ($context -and $AssignmentTarget -eq 'Group') {
         try {

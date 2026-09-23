@@ -12,10 +12,12 @@ function Publish-NSPCodeSigningTrust {
         [Parameter(Mandatory)][string]$RepoRoot,
         [ValidateSet('AllDevices','Group','None')][string]$AssignmentTarget = 'AllDevices',
         [string]$GroupId,
+        [Parameter(Mandatory)][string]$TenantId,
+        [Parameter(Mandatory)][string]$ClientId,
         [switch]$Execute
     )
 
-    $plan = Get-NSPCodeSigningTrustPlan -RepoRoot $RepoRoot -AssignmentTarget $AssignmentTarget -GroupId $GroupId -Connect:$Execute
+    $plan = Get-NSPCodeSigningTrustPlan -RepoRoot $RepoRoot -AssignmentTarget $AssignmentTarget -GroupId $GroupId -TenantId $TenantId -ClientId $ClientId -Connect:$Execute
     if (-not $Execute) { return $plan }
     if (@($plan.Conflicts).Count -gt 0) { throw "Execution stopped because conflicts were found: $($plan.Conflicts -join '; ')" }
     if (-not $plan.CanExecute) { throw 'The plan is not executable. Confirm Graph authentication and resolve any conflicts.' }

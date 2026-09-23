@@ -128,28 +128,34 @@ function Start-NSPIntuneApps {
                 Write-Host 'Certificate creation is deliberately a separate elevated command: New-NSPCodeSigningCertificate -RepoRoot <path> -Activate'
             }
             '5' {
-                Write-Host '[A] All devices (default)'
-                Write-Host '[G] One selected group'
-                Write-Host '[N] Create without assignment'
-                $targetChoice = Read-NSPMenuChoice -Prompt 'Assignment target' -Allowed @('A','G','N') -Default 'A'
-                $target = @{ A='AllDevices'; G='Group'; N='None' }[$targetChoice]
-                $groupId = if ($target -eq 'Group') { Read-Host 'Enter the Microsoft Entra group object ID' } else { $null }
-                $plan = Get-NSPCodeSigningTrustPlan -RepoRoot $RepoRoot -AssignmentTarget $target -GroupId $groupId -Connect
-                Write-NSPDenseFieldSummary -InputObject ($plan | Select-Object ProfileName, Action, Thumbprint, CertificateExpires, AssignmentTarget, AssignmentDisplayName, TenantId, Account, MissingUris, Conflicts, CanExecute)
-                if (@($plan.Conflicts).Count -gt 0) {
-                    Write-Warning 'Conflicts were found. Resolve them before this plan can execute.'
-                } elseif (-not $plan.CanExecute) {
-                    Write-Warning 'This plan is not executable yet (check tenant authentication above).'
-                } elseif ($plan.Action -eq 'NoChange') {
-                    Write-Host 'The expected generation is already present in this profile. Nothing to publish.' -ForegroundColor Green
+                $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+                if (-not (Test-Path -LiteralPath $registrationPath)) {
+                    Write-Warning 'No tenant app registration is recorded. Use [11] first.'
                 } else {
-                    $executeChoice = Read-NSPMenuChoice -Prompt "$($plan.Action) '$($plan.ProfileName)' for tenant $($plan.TenantId) now? [Y/N]" -Allowed @('Y','N') -Default 'N'
-                    if ($executeChoice -eq 'Y') {
-                        $result = Publish-NSPCodeSigningTrust -RepoRoot $RepoRoot -AssignmentTarget $target -GroupId $groupId -Execute -Confirm:$false
-                        $result | Select-Object ProfileName, Action, Thumbprint, TenantId, AssignmentTarget | Format-List
-                        Write-Host 'Trust profile published.' -ForegroundColor Green
+                    $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+                    Write-Host '[A] All devices (default)'
+                    Write-Host '[G] One selected group'
+                    Write-Host '[N] Create without assignment'
+                    $targetChoice = Read-NSPMenuChoice -Prompt 'Assignment target' -Allowed @('A','G','N') -Default 'A'
+                    $target = @{ A='AllDevices'; G='Group'; N='None' }[$targetChoice]
+                    $groupId = if ($target -eq 'Group') { Read-Host 'Enter the Microsoft Entra group object ID' } else { $null }
+                    $plan = Get-NSPCodeSigningTrustPlan -RepoRoot $RepoRoot -AssignmentTarget $target -GroupId $groupId -TenantId $registration.TenantId -ClientId $registration.ClientId -Connect
+                    Write-NSPDenseFieldSummary -InputObject ($plan | Select-Object ProfileName, Action, Thumbprint, CertificateExpires, AssignmentTarget, AssignmentDisplayName, TenantId, Account, MissingUris, Conflicts, CanExecute)
+                    if (@($plan.Conflicts).Count -gt 0) {
+                        Write-Warning 'Conflicts were found. Resolve them before this plan can execute.'
+                    } elseif (-not $plan.CanExecute) {
+                        Write-Warning 'This plan is not executable yet (check tenant authentication above).'
+                    } elseif ($plan.Action -eq 'NoChange') {
+                        Write-Host 'The expected generation is already present in this profile. Nothing to publish.' -ForegroundColor Green
                     } else {
-                        Write-Host 'No changes were made.' -ForegroundColor Yellow
+                        $executeChoice = Read-NSPMenuChoice -Prompt "$($plan.Action) '$($plan.ProfileName)' for tenant $($plan.TenantId) now? [Y/N]" -Allowed @('Y','N') -Default 'N'
+                        if ($executeChoice -eq 'Y') {
+                            $result = Publish-NSPCodeSigningTrust -RepoRoot $RepoRoot -AssignmentTarget $target -GroupId $groupId -TenantId $registration.TenantId -ClientId $registration.ClientId -Execute -Confirm:$false
+                            $result | Select-Object ProfileName, Action, Thumbprint, TenantId, AssignmentTarget | Format-List
+                            Write-Host 'Trust profile published.' -ForegroundColor Green
+                        } else {
+                            Write-Host 'No changes were made.' -ForegroundColor Yellow
+                        }
                     }
                 }
             }
