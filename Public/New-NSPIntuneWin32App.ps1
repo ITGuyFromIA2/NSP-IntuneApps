@@ -52,7 +52,13 @@ function New-NSPIntuneWin32App {
     Import-Module IntuneWin32App -ErrorAction Stop
     Connect-MSIntuneGraph -TenantID $TenantId -ClientID $ClientId | Out-Null
 
-    $detectionRule = New-IntuneWin32AppDetectionRuleScript -ScriptFile $buildPlan.DetectionScriptPath -EnforceSignatureCheck $buildPlan.EnforceSignatureDetection -RunAs32Bit $buildPlan.RunAs32BitDetection
+    $detectionRule = if ($buildPlan.DetectionStyle -eq 'Registry_Exist') {
+        $registryArgs = @{ Existence = $true; DetectionType = 'exists'; KeyPath = $buildPlan.RegistryKeyPath }
+        if ($buildPlan.RegistryValueName) { $registryArgs.ValueName = $buildPlan.RegistryValueName }
+        New-IntuneWin32AppDetectionRuleRegistry @registryArgs
+    } else {
+        New-IntuneWin32AppDetectionRuleScript -ScriptFile $buildPlan.DetectionScriptPath -EnforceSignatureCheck $buildPlan.EnforceSignatureDetection -RunAs32Bit $buildPlan.RunAs32BitDetection
+    }
     $requirementRule = New-IntuneWin32AppRequirementRule -Architecture $buildPlan.RequirementArchitecture -MinimumSupportedWindowsRelease $buildPlan.RequirementMinimumWindowsRelease
     $icon = if ($buildPlan.IconPath) { New-IntuneWin32AppIcon -FilePath $buildPlan.IconPath } else { $null }
 

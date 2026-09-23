@@ -35,6 +35,13 @@ function Set-NSPAppDeploymentDecisions {
         if ($choice -eq 'Q') { break }
         $entry.Decision = if ($choice -eq 'Y') { 'Approved' } else { 'Skipped' }
         $entry.ReviewedAt = (Get-Date).ToString('o')
+        if ($entry.Decision -eq 'Approved' -and $entryReview.PlannedAction -eq 'CreateSupersedingApp') {
+            Write-Host "This creates a new app object side-by-side with the existing one ($($entryReview.ExistingObject)) and relates them." -ForegroundColor Yellow
+            Write-Host '[1] Update - the old app''s install/config state stays in place (a newer version of the same product)'
+            Write-Host '[2] Replace - the old app is uninstalled first (an unrelated product being swapped in)'
+            $supersedenceChoice = Read-NSPMenuChoice -Prompt 'Supersedence type' -Allowed @('1','2') -Default '1'
+            $entry | Add-Member -NotePropertyName SupersedenceType -NotePropertyValue $(if ($supersedenceChoice -eq '2') { 'Replace' } else { 'Update' }) -Force
+        }
         if ($PSCmdlet.ShouldProcess($PlanPath, "Record $($entry.Decision) for $($entry.Name)")) {
             $plan | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $PlanPath -Encoding UTF8
         }

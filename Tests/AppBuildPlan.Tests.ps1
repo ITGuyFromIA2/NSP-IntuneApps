@@ -149,7 +149,7 @@ Describe 'Resolve-NSPAppBuildPlan' {
     It 'throws clearly for a SetupType this resolver does not implement' {
         $root = Join-Path $TestDrive 'UnsupportedSetupType'
         New-FixtureApp -Root $root
-        $config = @{ SetupType = 'PoSH_sysnative'; DetectionStyle = 'Script' }
+        $config = @{ SetupType = 'MSI'; DetectionStyle = 'Script' }
 
         { InModuleScope NSP.IntuneApps -Parameters @{ root = $root; config = $config } {
                 param($root, $config)
@@ -160,12 +160,71 @@ Describe 'Resolve-NSPAppBuildPlan' {
     It 'throws clearly for a DetectionStyle this resolver does not implement' {
         $root = Join-Path $TestDrive 'UnsupportedDetectionStyle'
         New-FixtureApp -Root $root
-        $config = @{ SetupType = 'PoSH'; DetectionStyle = 'Registry_Exist' }
+        $config = @{ SetupType = 'PoSH'; DetectionStyle = 'MSI' }
 
         { InModuleScope NSP.IntuneApps -Parameters @{ root = $root; config = $config } {
                 param($root, $config)
                 Resolve-NSPAppBuildPlan -Name 'Fixture' -SettingsPath (Join-Path $root 'Fixture_SplitScriptSettings.ps1') -Path $root -VariableConfig $config
             } } | Should -Throw '*does not yet support*'
+    }
+
+    It 'builds a Sysnative PowerShell command line for SetupType PoSH_sysnative' {
+        $root = Join-Path $TestDrive 'Sysnative'
+        New-FixtureApp -Root $root
+        $config = @{
+            SetupType = 'PoSH_sysnative'; DetectionStyle = 'Script'
+            SetupFile_Filter = 'DownloadInstall_*.ps1'
+            DetectScript_Filter = 'Detect_*.ps1'
+            PoSH = @{ UninstallFile_Filter = 'Uninstall_*.ps1' }
+            REQ_Architecture = 'All'; REQ_MinWindowsRelase = 'W10_1607'
+        }
+
+        $plan = InModuleScope NSP.IntuneApps -Parameters @{ root = $root; config = $config } {
+            param($root, $config)
+            Resolve-NSPAppBuildPlan -Name 'Fixture' -SettingsPath (Join-Path $root 'Fixture_SplitScriptSettings.ps1') -Path $root -VariableConfig $config
+        }
+
+        $plan.InstallCommandLine | Should -Be '%windir%\Sysnative\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "DownloadInstall_Fixture.ps1"'
+        $plan.UninstallCommandLine | Should -Be '%windir%\Sysnative\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "Uninstall_Fixture.ps1"'
+    }
+
+    It 'builds registry KeyPath/ValueName for DetectionStyle Registry_Exist instead of a detection script' {
+        $root = Join-Path $TestDrive 'RegistryDetection'
+        New-FixtureApp -Root $root
+        $config = @{
+            SetupType = 'PoSH'; DetectionStyle = 'Registry_Exist'
+            SetupFile_Filter = 'DownloadInstall_*.ps1'
+            PoSH = @{ UninstallFile_Filter = 'Uninstall_*.ps1' }
+            REQ_Architecture = 'All'; REQ_MinWindowsRelase = 'W10_1607'
+            Detection_KeyPath = 'HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels\Example'
+            Detection_ValueName = 'Server'
+        }
+
+        $plan = InModuleScope NSP.IntuneApps -Parameters @{ root = $root; config = $config } {
+            param($root, $config)
+            Resolve-NSPAppBuildPlan -Name 'Fixture' -SettingsPath (Join-Path $root 'Fixture_SplitScriptSettings.ps1') -Path $root -VariableConfig $config
+        }
+
+        $plan.DetectionStyle | Should -Be 'Registry_Exist'
+        $plan.RegistryKeyPath | Should -Be 'HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels\Example'
+        $plan.RegistryValueName | Should -Be 'Server'
+        $plan.DetectionScriptPath | Should -BeNullOrEmpty
+    }
+
+    It 'throws when DetectionStyle Registry_Exist has no Detection_KeyPath' {
+        $root = Join-Path $TestDrive 'RegistryMissingKeyPath'
+        New-FixtureApp -Root $root
+        $config = @{
+            SetupType = 'PoSH'; DetectionStyle = 'Registry_Exist'
+            SetupFile_Filter = 'DownloadInstall_*.ps1'
+            PoSH = @{ UninstallFile_Filter = 'Uninstall_*.ps1' }
+            REQ_Architecture = 'All'; REQ_MinWindowsRelase = 'W10_1607'
+        }
+
+        { InModuleScope NSP.IntuneApps -Parameters @{ root = $root; config = $config } {
+                param($root, $config)
+                Resolve-NSPAppBuildPlan -Name 'Fixture' -SettingsPath (Join-Path $root 'Fixture_SplitScriptSettings.ps1') -Path $root -VariableConfig $config
+            } } | Should -Throw '*does not declare Detection_KeyPath*'
     }
 
     It 'throws when more than one file matches the setup filter' {

@@ -10,6 +10,27 @@ Describe 'New-NSPIntuneAssignmentFilter' {
         $result.Rule | Should -Be '(device.deviceOwnership -eq "Corporate")'
     }
 
+    It 'joins top-level clauses with or when -TopLevelOperator or is passed' {
+        $result = New-NSPIntuneAssignmentFilter -DisplayName 'Dell or HP' -Platform 'windows10AndLater' -TopLevelOperator 'or' -Clauses @(
+            @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'Dell' }
+            @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'HP' }
+        ) -TenantId 'tenant-1' -ClientId 'client-1'
+
+        $result.Rule | Should -Be '(device.manufacturer -eq "Dell") or (device.manufacturer -eq "HP")'
+    }
+
+    It 'accepts a nested group clause, wrapped in its own parens' {
+        $result = New-NSPIntuneAssignmentFilter -DisplayName 'Nested' -Platform 'windows10AndLater' -Clauses @(
+            @{ Property = 'device.osVersion'; Operator = 'startsWith'; Value = '10.0' }
+            @{ Operator = 'or'; Clauses = @(
+                @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'Dell' }
+                @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'HP' }
+            ) }
+        ) -TenantId 'tenant-1' -ClientId 'client-1'
+
+        $result.Rule | Should -Be '(device.osVersion -startsWith "10.0") and ((device.manufacturer -eq "Dell") or (device.manufacturer -eq "HP"))'
+    }
+
     It 'accepts a raw rule string directly, bypassing clause assembly' {
         $result = New-NSPIntuneAssignmentFilter -DisplayName 'Hand-authored' -Platform 'windows10AndLater' -Rule '(device.manufacturer -in ["Dell","HP"])' -TenantId 'tenant-1' -ClientId 'client-1'
 

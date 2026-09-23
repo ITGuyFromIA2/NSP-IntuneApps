@@ -21,6 +21,22 @@ Describe 'Find-NSPIntuneGroup' {
         }
     }
 
+    It 'lists all groups without a filter when NameContains is blank' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest {
+            [pscustomobject]@{ value = @(
+                [pscustomobject]@{ id = 'group-1'; displayName = 'Group-MDM_Dynamic_AllUsers' }
+            ) }
+        } -ModuleName NSP.IntuneApps
+
+        $result = Find-NSPIntuneGroup -TenantId 'tenant-1' -ClientId 'client-1'
+
+        $result.Count | Should -Be 1
+        Should -Invoke Invoke-MgGraphRequest -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $Uri -notmatch '\$filter=' -and $Uri -match '\$orderby=displayName' -and $Headers.ConsistencyLevel -eq 'eventual'
+        }
+    }
+
     It 'escapes an embedded single quote in the search term' {
         Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
         Mock Invoke-MgGraphRequest { [pscustomobject]@{ value = @() } } -ModuleName NSP.IntuneApps

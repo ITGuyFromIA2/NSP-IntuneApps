@@ -31,7 +31,7 @@ function New-NSPAppDeploymentRun {
 
     $stageMap = @{
         NoChange = @('ValidatePlan')
-        Create = @('ValidatePlan','Build','Sign','Package','CreateApp','RecordManagementNotes')
+        Create = @('ValidatePlan','Build','Sign','Package','CreateApp','RecordManagementNotes','AssignDefaultGroups')
         UpdateMetadataInPlace = @('ValidatePlan','PatchMetadata','RecordManagementNotes')
         UpdateContentInPlace = @('ValidatePlan','Build','Sign','Package','UploadContent','CommitContent','RecordManagementNotes')
         CreateSupersedingApp = @('ValidatePlan','Build','Sign','Package','CreateApp','AddSupersedence','RecordManagementNotes')
@@ -44,12 +44,13 @@ function New-NSPAppDeploymentRun {
         $stageNames = @($stageMap[[string]$entry.PlannedAction])
         if ($stageNames.Count -eq 0) { throw "Approved entry '$($entry.Name)' has unsupported action '$($entry.PlannedAction)'." }
         [ordered]@{
-            Order          = $entry.Order
-            Name           = $entry.Name
-            SourceId       = $entry.SourceId
-            PlannedAction  = $entry.PlannedAction
-            IntuneObjectId = $entry.IntuneObjectId
-            Status         = 'Pending'
+            Order            = $entry.Order
+            Name             = $entry.Name
+            SourceId         = $entry.SourceId
+            PlannedAction    = $entry.PlannedAction
+            IntuneObjectId   = $entry.IntuneObjectId
+            SupersedenceType = if ($entry.PSObject.Properties['SupersedenceType']) { [string]$entry.SupersedenceType } else { 'Update' }
+            Status           = 'Pending'
             Stages         = @($stageNames | ForEach-Object {
                 [ordered]@{ Name=$_; Status='Pending'; Attempt=0; StartedAtUtc=$null; CompletedAtUtc=$null; Message=$null }
             })

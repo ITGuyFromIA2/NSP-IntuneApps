@@ -55,4 +55,80 @@ Describe 'Build-NSPAssignmentFilterRule' {
             { Build-NSPAssignmentFilterRule -Clauses @() } | Should -Throw '*Clauses*because it is an empty array*'
         }
     }
+
+    It 'joins top-level clauses with or when -Operator or is passed' {
+        InModuleScope NSP.IntuneApps {
+            $rule = Build-NSPAssignmentFilterRule -Operator 'or' -Clauses @(
+                @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'Dell' }
+                @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'HP' }
+            )
+            $rule | Should -Be '(device.manufacturer -eq "Dell") or (device.manufacturer -eq "HP")'
+        }
+    }
+
+    It 'wraps a nested multi-clause OR group in its own parens when combined with an outer AND' {
+        InModuleScope NSP.IntuneApps {
+            $rule = Build-NSPAssignmentFilterRule -Clauses @(
+                @{ Property = 'device.osVersion'; Operator = 'startsWith'; Value = '10.0' }
+                @{
+                    Operator = 'or'
+                    Clauses  = @(
+                        @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'Dell' }
+                        @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'HP' }
+                    )
+                }
+            )
+            $rule | Should -Be '(device.osVersion -startsWith "10.0") and ((device.manufacturer -eq "Dell") or (device.manufacturer -eq "HP"))'
+        }
+    }
+
+    It 'does not add redundant parens around a single-clause group' {
+        InModuleScope NSP.IntuneApps {
+            $rule = Build-NSPAssignmentFilterRule -Clauses @(
+                @{ Property = 'device.osVersion'; Operator = 'startsWith'; Value = '10.0' }
+                @{
+                    Operator = 'or'
+                    Clauses  = @(@{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'Dell' })
+                }
+            )
+            $rule | Should -Be '(device.osVersion -startsWith "10.0") and (device.manufacturer -eq "Dell")'
+        }
+    }
+
+    It 'supports groups nested more than one level deep' {
+        InModuleScope NSP.IntuneApps {
+            $rule = Build-NSPAssignmentFilterRule -Clauses @(
+                @{ Property = 'device.deviceOwnership'; Operator = 'eq'; Value = 'Corporate' }
+                @{
+                    Operator = 'or'
+                    Clauses  = @(
+                        @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'Dell' }
+                        @{
+                            Operator = 'and'
+                            Clauses  = @(
+                                @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'HP' }
+                                @{ Property = 'device.model'; Operator = 'startsWith'; Value = 'EliteBook' }
+                            )
+                        }
+                    )
+                }
+            )
+            $rule | Should -Be '(device.deviceOwnership -eq "Corporate") and ((device.manufacturer -eq "Dell") or ((device.manufacturer -eq "HP") and (device.model -startsWith "EliteBook")))'
+        }
+    }
+
+    It 'a group with no explicit Operator defaults to and' {
+        InModuleScope NSP.IntuneApps {
+            $rule = Build-NSPAssignmentFilterRule -Clauses @(
+                @{ Property = 'device.deviceOwnership'; Operator = 'eq'; Value = 'Corporate' }
+                @{
+                    Clauses = @(
+                        @{ Property = 'device.manufacturer'; Operator = 'eq'; Value = 'Dell' }
+                        @{ Property = 'device.model'; Operator = 'startsWith'; Value = 'Latitude' }
+                    )
+                }
+            )
+            $rule | Should -Be '(device.deviceOwnership -eq "Corporate") and ((device.manufacturer -eq "Dell") and (device.model -startsWith "Latitude"))'
+        }
+    }
 }

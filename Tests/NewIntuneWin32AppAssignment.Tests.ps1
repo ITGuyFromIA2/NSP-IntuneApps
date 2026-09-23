@@ -56,4 +56,53 @@ Describe 'New-NSPIntuneWin32AppAssignment' {
         $result.Status | Should -Be 'Assigned'
         Should -Invoke Add-IntuneWin32AppAssignmentGroup -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter { $Exclude -eq $true }
     }
+
+    It 'throws when GroupId is missing for TargetType Group' {
+        { New-NSPIntuneWin32AppAssignment -IntuneObjectId 'app-1' -Mode Include -TenantId 'tenant-1' -ClientId 'client-1' } |
+            Should -Throw '*GroupId is required*'
+    }
+
+    It 'throws when Exclude is requested for TargetType AllUsers' {
+        { New-NSPIntuneWin32AppAssignment -IntuneObjectId 'app-1' -TargetType AllUsers -Mode Exclude -TenantId 'tenant-1' -ClientId 'client-1' } |
+            Should -Throw '*Exclude is not supported*'
+    }
+
+    It 'throws when availableWithoutEnrollment is requested for TargetType AllDevices' {
+        { New-NSPIntuneWin32AppAssignment -IntuneObjectId 'app-1' -TargetType AllDevices -Mode Include -Intent availableWithoutEnrollment -TenantId 'tenant-1' -ClientId 'client-1' } |
+            Should -Throw "*Intent 'availableWithoutEnrollment' is not supported*"
+    }
+
+    It 'reports an All Users plan without requiring a GroupId' {
+        $result = New-NSPIntuneWin32AppAssignment -IntuneObjectId 'app-1' -AppDisplayName 'Fixture' -TargetType AllUsers -Mode Include -Intent required -TenantId 'tenant-1' -ClientId 'client-1'
+
+        $result.Status | Should -Be 'PlanOnly'
+        $result.TargetType | Should -Be 'AllUsers'
+        $result.Message | Should -Match "Include-assign 'Fixture' to 'All Users'"
+    }
+
+    It 'creates an All Users assignment' -Skip:(-not $script:intuneWin32AppAvailable) {
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32AppAssignmentAllUsers { } -ModuleName NSP.IntuneApps
+
+        $result = New-NSPIntuneWin32AppAssignment -IntuneObjectId 'app-1' -TargetType AllUsers -Mode Include -Intent required -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false
+
+        $result.Status | Should -Be 'Assigned'
+        $result.TargetType | Should -Be 'AllUsers'
+        Should -Invoke Add-IntuneWin32AppAssignmentAllUsers -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $ID -eq 'app-1' -and $Intent -eq 'required'
+        }
+    }
+
+    It 'creates an All Devices assignment scoped by a filter' -Skip:(-not $script:intuneWin32AppAvailable) {
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32AppAssignmentAllDevices { } -ModuleName NSP.IntuneApps
+
+        $result = New-NSPIntuneWin32AppAssignment -IntuneObjectId 'app-1' -TargetType AllDevices -Mode Include -Intent required -FilterDisplayName 'Corporate Windows' -FilterMode Include -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false
+
+        $result.Status | Should -Be 'Assigned'
+        $result.TargetType | Should -Be 'AllDevices'
+        Should -Invoke Add-IntuneWin32AppAssignmentAllDevices -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $FilterName -eq 'Corporate Windows' -and $FilterMode -eq 'Include'
+        }
+    }
 }

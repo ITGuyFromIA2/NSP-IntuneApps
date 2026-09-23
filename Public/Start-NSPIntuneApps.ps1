@@ -49,9 +49,11 @@ function Start-NSPIntuneApps {
         Write-Host '  [13] Save a read-only app assignment and filter inventory'
         Write-Host '  [14] Assign an app to a group, optionally scoped by a filter'
         Write-Host '  [15] Build and create an assignment filter'
+        Write-Host '  [16] Manage master assignment groups (tenant defaults + per-app overrides)'
+        Write-Host '  [17] Review and retire superseded apps (separate, explicitly approved)' -ForegroundColor Red
         Write-Host ''
         Write-Host '  [Q] Quit'
-        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','Q')
+        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','Q')
 
         switch ($choice) {
             '1' {
@@ -60,27 +62,7 @@ function Start-NSPIntuneApps {
             }
             '2' { $catalog | Format-Table Name, Classification, ScriptCount, PackageCount, Reason -AutoSize -Wrap }
             '3' {
-                Write-Host '[A] Drive map' -ForegroundColor Cyan
-                Write-Host '[B] RDP / RemoteApp'
-                Write-Host '[C] Printer driver / queue'
-                Write-Host '[D] Capture an interactive installer sequence'
-                Write-Host '[E] FortiClient VPN configuration'
-                Write-Host '[F] Web / file shortcut'
-                Write-Host '[G] Adobe Acrobat / Reader package'
-                Write-Host '[H] Managed Reboots policy'
-                $template = Read-NSPMenuChoice -Prompt 'Template' -Allowed @('A','B','C','D','E','F','G','H') -Default 'A'
-                if ($template -eq 'A') { New-NSPDriveMapApp -RepoRoot $RepoRoot -Interactive }
-                elseif ($template -eq 'B') { New-NSPRdpApp -RepoRoot $RepoRoot -Interactive }
-                elseif ($template -eq 'C') { New-NSPPrinterApp -RepoRoot $RepoRoot -Interactive }
-                elseif ($template -eq 'D') {
-                    Write-Host 'Example: C:\Temp\VendorSetup.exe' -ForegroundColor DarkGray
-                    $installerPath = Read-Host 'Installer path'
-                    Start-NSPInstallerCapture -InstallerPath $installerPath
-                }
-                elseif ($template -eq 'E') { New-NSPFortiClientVpnConfigApp -RepoRoot $RepoRoot -Interactive }
-                elseif ($template -eq 'F') { New-NSPShortcutApp -RepoRoot $RepoRoot -Interactive }
-                elseif ($template -eq 'G') { New-NSPAdobeApp -RepoRoot $RepoRoot -Interactive }
-                elseif ($template -eq 'H') { New-NSPManagedRebootsApp -RepoRoot $RepoRoot -Interactive }
+                Invoke-NSPGuidedTemplateWizardMenu -RepoRoot $RepoRoot | Out-Null
             }
             '4' {
                 $config = Get-NSPCodeSigningConfiguration -RepoRoot $RepoRoot
@@ -96,7 +78,7 @@ function Start-NSPIntuneApps {
                 $target = @{ A='AllDevices'; G='Group'; N='None' }[$targetChoice]
                 $groupId = if ($target -eq 'Group') { Read-Host 'Enter the Microsoft Entra group object ID' } else { $null }
                 $plan = Get-NSPCodeSigningTrustPlan -RepoRoot $RepoRoot -AssignmentTarget $target -GroupId $groupId -Connect
-                $plan | Select-Object ProfileName, Action, Thumbprint, CertificateExpires, AssignmentTarget, AssignmentDisplayName, TenantId, Account, MissingUris, Conflicts, CanExecute | Format-List
+                Write-NSPDenseFieldSummary -InputObject ($plan | Select-Object ProfileName, Action, Thumbprint, CertificateExpires, AssignmentTarget, AssignmentDisplayName, TenantId, Account, MissingUris, Conflicts, CanExecute)
                 if (@($plan.Conflicts).Count -gt 0) {
                     Write-Warning 'Conflicts were found. Resolve them before this plan can execute.'
                 } elseif (-not $plan.CanExecute) {
@@ -116,28 +98,55 @@ function Start-NSPIntuneApps {
             }
             '6' {
                 $deployableCatalog = @($catalog | Where-Object Classification -eq 'Deployable' | Sort-Object Name)
-                if ($deployableCatalog.Count -eq 0) {
-                    Write-Warning 'No deployable catalog entries were found.'
-                } else {
-                    for ($index = 0; $index -lt $deployableCatalog.Count; $index++) {
-                        Write-Host ("[{0}] {1}" -f ($index + 1), $deployableCatalog[$index].Name)
-                    }
-                    Write-Host 'Build a batch by number (e.g. 1,3,5), by name, or press Enter to include every deployable app above.'
-                    $picked = Read-Host 'Apps'
-                    $selection = if ([string]::IsNullOrWhiteSpace($picked)) {
-                        $null
+                $selectedNames = [Collections.Generic.List[string]]::new()
+                $done = $false
+                do {
+                    Write-NSPDashboardHeader -Title 'Build an app deployment tracker' -StatusLines @(
+                        "Selected: $($selectedNames.Count) of $($deployableCatalog.Count) deployable app(s)"
+                    )
+                    if ($deployableCatalog.Count -eq 0) {
+                        Write-Host 'No deployable catalog entries were found yet.' -ForegroundColor Yellow
                     } else {
-                        $tokens = @($picked -split ',' | ForEach-Object Trim | Where-Object { $_ })
-                        @($tokens | ForEach-Object {
-                            if ($_ -match '^\d+$' -and [int]$_ -ge 1 -and [int]$_ -le $deployableCatalog.Count) {
-                                $deployableCatalog[[int]$_ - 1].Name
-                            } else {
-                                $_
-                            }
-                        })
+                        $markers = @($deployableCatalog | ForEach-Object { if ($selectedNames.Contains($_.Name)) { '[x]' } else { '[ ]' } })
+                        Write-NSPDenseNumberedList -Items @($deployableCatalog.Name) -Markers $markers
                     }
-                    if ($selection) { Write-Host "Batch: $($selection -join ', ')" -ForegroundColor Cyan }
-                    $planFile = New-NSPAppDeploymentPlan -RepoRoot $RepoRoot -AppName $selection
+                    Write-Host ''
+                    Write-Host 'Pick a number to toggle it on/off, one at a time.' -ForegroundColor DarkGray
+                    Write-Host '  [A] Select all remaining'
+                    Write-Host '  [W] Create a new app from the guided template wizard, then add it here'
+                    Write-Host '  [D] Done selecting'
+                    $pickAllowed = @(@(if ($deployableCatalog.Count -gt 0) { 1..$deployableCatalog.Count | ForEach-Object { [string]$_ } }) + @('A', 'W', 'D'))
+                    $pick = Read-NSPMenuChoice -Prompt 'Toggle a number, or choose an action' -Allowed $pickAllowed -Default 'D'
+                    switch ($pick) {
+                        'D' { $done = $true }
+                        'A' {
+                            foreach ($item in $deployableCatalog) { if (-not $selectedNames.Contains($item.Name)) { $selectedNames.Add($item.Name) } }
+                        }
+                        'W' {
+                            $newApp = Invoke-NSPGuidedTemplateWizardMenu -RepoRoot $RepoRoot
+                            if ($newApp -and $newApp.Path) {
+                                $newName = Split-Path -Path $newApp.Path -Leaf
+                                $catalog = @((Test-NSPIntuneAppsPreflight -RepoRoot $RepoRoot).Catalog)
+                                $deployableCatalog = @($catalog | Where-Object Classification -eq 'Deployable' | Sort-Object Name)
+                                if (-not $selectedNames.Contains($newName)) { $selectedNames.Add($newName) }
+                                if (@($deployableCatalog.Name) -notcontains $newName) {
+                                    Write-Warning "'$newName' was created but is not classified Deployable yet (check code signing/configuration). It is still included in this selection."
+                                    Read-Host 'Press Enter to continue' | Out-Null
+                                }
+                            }
+                        }
+                        default {
+                            $targetName = $deployableCatalog[[int]$pick - 1].Name
+                            if ($selectedNames.Contains($targetName)) { $selectedNames.Remove($targetName) | Out-Null } else { $selectedNames.Add($targetName) }
+                        }
+                    }
+                } while (-not $done)
+
+                if ($selectedNames.Count -eq 0) {
+                    Write-Warning 'No apps were selected. No tracker was created.'
+                } else {
+                    Write-Host "Batch: $($selectedNames -join ', ')" -ForegroundColor Cyan
+                    $planFile = New-NSPAppDeploymentPlan -RepoRoot $RepoRoot -AppName @($selectedNames)
                     Write-Host "Tracker saved to $($planFile.FullName)" -ForegroundColor Green
                     Write-Host 'Collect and bind a read-only tenant inventory before approving any app action.' -ForegroundColor Yellow
                 }
@@ -145,7 +154,7 @@ function Start-NSPIntuneApps {
             '7' {
                 Write-Host 'A delegated browser login may open. Requested permission: DeviceManagementApps.Read.All (read-only).' -ForegroundColor Yellow
                 $inventory = Get-NSPIntuneAppInventory -RepoRoot $RepoRoot -Connect
-                $inventory | Select-Object TenantId, Account, AppCount, ManagedCount, OutputPath | Format-List
+                Write-NSPDenseFieldSummary -InputObject ($inventory | Select-Object TenantId, Account, AppCount, ManagedCount, OutputPath)
                 $bindablePlans = @(Get-NSPAppDeploymentPlanSummary -RepoRoot $RepoRoot | Select-Object -First 9)
                 if ($bindablePlans.Count -gt 0) {
                     Write-Host 'Bind this inventory to a tracker now? No tenant data will be changed.' -ForegroundColor Cyan
@@ -160,7 +169,7 @@ function Start-NSPIntuneApps {
                         $selectedPlan = $bindablePlans[[int]$planChoice - 1]
                         Update-NSPAppDeploymentPlan -PlanPath $selectedPlan.PlanPath -InventoryPath $inventory.OutputPath | Format-List PlanPath, Executable, ReviewRequired
                         $review = Get-NSPAppDeploymentPlanReview -PlanPath $selectedPlan.PlanPath
-                        $review | Select-Object TenantId, Account, SafetyMode, Targeting, CanReviewDecisions, ExecutorStatus, Blockers, Warnings | Format-List
+                        Write-NSPDenseFieldSummary -InputObject ($review | Select-Object TenantId, Account, SafetyMode, Targeting, CanReviewDecisions, ExecutorStatus, Blockers, Warnings)
                         $review.Entries | Format-Table Order, Name, PlannedAction, Decision, CanApprove, Effect -Wrap
                     }
                 }
@@ -179,7 +188,7 @@ function Start-NSPIntuneApps {
                     $planChoice = Read-NSPMenuChoice -Prompt 'Tracker to resume' -Allowed $allowedPlans -Default '1'
                     $selectedPlan = $recentPlans[[int]$planChoice - 1]
                     $review = Get-NSPAppDeploymentPlanReview -PlanPath $selectedPlan.PlanPath
-                    $review | Select-Object TenantId, Account, SafetyMode, Targeting, CanReviewDecisions, ExecutorStatus, Blockers, Warnings | Format-List
+                    Write-NSPDenseFieldSummary -InputObject ($review | Select-Object TenantId, Account, SafetyMode, Targeting, CanReviewDecisions, ExecutorStatus, Blockers, Warnings)
                     $review.Entries | Format-Table Order, Name, PlannedAction, Decision, CanApprove, Effect -Wrap
                     if ($review.CanReviewDecisions) {
                         $reviewDecisions = Read-NSPMenuChoice -Prompt 'Review pending app decisions one at a time? [Y/N]' -Allowed @('Y','N') -Default 'Y'
@@ -310,7 +319,7 @@ function Start-NSPIntuneApps {
             '13' {
                 Write-Host 'A delegated browser login may open. This reads every Win32 app''s current assignments and every assignment filter in the tenant - no tenant data is changed.' -ForegroundColor Yellow
                 $inventory = Get-NSPIntuneAppAssignmentInventory -RepoRoot $RepoRoot -Connect
-                $inventory | Select-Object TenantId, Account, AppCount, AssignmentCount, FilterCount, OutputPath | Format-List
+                Write-NSPDenseFieldSummary -InputObject ($inventory | Select-Object TenantId, Account, AppCount, AssignmentCount, FilterCount, OutputPath)
                 if (@($inventory.Filters).Count -gt 0) {
                     Write-Host 'Existing assignment filters:' -ForegroundColor Cyan
                     $inventory.Filters | Format-Table DisplayName, Platform, Rule -Wrap
@@ -342,40 +351,13 @@ function Start-NSPIntuneApps {
                     $latestAssignmentInventory = if (Test-Path -LiteralPath $assignmentInventoryRoot) { Get-ChildItem -LiteralPath $assignmentInventoryRoot -Filter '*.json' -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 } else { $null }
                     $knownGroups = if ($latestAssignmentInventory) { @((Get-Content -LiteralPath $latestAssignmentInventory.FullName -Raw | ConvertFrom-Json).DistinctGroups) } else { @() }
 
-                    $targetGroup = $null
-                    do {
-                        Write-Host 'Pick a group:' -ForegroundColor Cyan
-                        if (@($knownGroups).Count -gt 0) {
-                            Write-Host '  [K] Choose from groups already used for assignment (from the last [13] harvest)'
-                        }
-                        Write-Host '  [S] Search all tenant groups by name'
-                        $groupSourceAllowed = if (@($knownGroups).Count -gt 0) { @('K', 'S') } else { @('S') }
-                        $groupSource = Read-NSPMenuChoice -Prompt 'Source' -Allowed $groupSourceAllowed -Default $groupSourceAllowed[0]
-                        if ($groupSource -eq 'K') {
-                            for ($index = 0; $index -lt $knownGroups.Count; $index++) { Write-Host ("  [{0}] {1} | {2}" -f ($index + 1), $knownGroups[$index].GroupDisplayName, $knownGroups[$index].GroupId) }
-                            $groupChoice = Read-NSPMenuChoice -Prompt 'Group' -Allowed @(1..$knownGroups.Count | ForEach-Object { [string]$_ })
-                            $targetGroup = [pscustomobject]@{ Id = $knownGroups[[int]$groupChoice - 1].GroupId; DisplayName = $knownGroups[[int]$groupChoice - 1].GroupDisplayName }
-                        } else {
-                            $searchTerm = Read-Host 'Search groups (matches anywhere in the name)'
-                            $matches = @(Find-NSPIntuneGroup -NameContains $searchTerm -TenantId $registration.TenantId -ClientId $registration.ClientId)
-                            if ($matches.Count -eq 0) {
-                                Write-Warning 'No matching groups were found. Try a different search.'
-                            } else {
-                                for ($index = 0; $index -lt $matches.Count; $index++) { Write-Host ("  [{0}] {1} | {2}" -f ($index + 1), $matches[$index].DisplayName, $matches[$index].Id) }
-                                Write-Host '  [R] Search again'
-                                $matchAllowed = @(@(1..$matches.Count | ForEach-Object { [string]$_ }) + 'R')
-                                $matchChoice = Read-NSPMenuChoice -Prompt 'Group' -Allowed $matchAllowed -Default 'R'
-                                if ($matchChoice -ne 'R') { $targetGroup = $matches[[int]$matchChoice - 1] }
-                            }
-                        }
-                    } while (-not $targetGroup)
+                    $target = Invoke-NSPAssignmentTargetPicker -TenantId $registration.TenantId -ClientId $registration.ClientId -KnownGroups $knownGroups
+                    $targetType = $target.TargetType
+                    $targetGroup = [pscustomobject]@{ Id = $target.Id; DisplayName = $target.DisplayName }
 
-                    Write-Host '[1] Include  [2] Exclude'
-                    $modeChoice = Read-NSPMenuChoice -Prompt 'Assignment mode' -Allowed @('1', '2') -Default '1'
-                    $mode = if ($modeChoice -eq '2') { 'Exclude' } else { 'Include' }
-                    Write-Host '[1] Required  [2] Available  [3] Uninstall  [4] Available without enrollment'
-                    $intentChoice = Read-NSPMenuChoice -Prompt 'Intent' -Allowed @('1', '2', '3', '4') -Default '1'
-                    $intent = @{ '1' = 'required'; '2' = 'available'; '3' = 'uninstall'; '4' = 'availableWithoutEnrollment' }[$intentChoice]
+                    $modeAndIntent = Read-NSPAssignmentModeAndIntent -TargetType $targetType
+                    $mode = $modeAndIntent.Mode
+                    $intent = $modeAndIntent.Intent
 
                     $filterDisplayName = $null
                     $filterMode = $null
@@ -396,7 +378,7 @@ function Start-NSPIntuneApps {
 
                     $assignArgs = @{
                         IntuneObjectId = $targetApp.Id; AppDisplayName = $targetApp.DisplayName
-                        GroupId = $targetGroup.Id; GroupDisplayName = $targetGroup.DisplayName
+                        TargetType = $targetType; GroupId = $targetGroup.Id; GroupDisplayName = $targetGroup.DisplayName
                         Mode = $mode; Intent = $intent; TenantId = $registration.TenantId; ClientId = $registration.ClientId
                     }
                     if ($filterDisplayName) { $assignArgs.FilterDisplayName = $filterDisplayName; $assignArgs.FilterMode = $filterMode }
@@ -427,44 +409,23 @@ function Start-NSPIntuneApps {
                     $platformChoice = Read-NSPMenuChoice -Prompt 'Platform' -Allowed $platformAllowed -Default '1'
                     $platform = if ($platformChoice -eq 'O') { Read-Host 'Platform (exact Graph value)' } else { $platforms[[int]$platformChoice - 1] }
 
-                    $commonProperties = @('device.deviceOwnership', 'device.manufacturer', 'device.model', 'device.deviceName', 'device.deviceCategory', 'device.enrollmentProfileName', 'device.deviceTrustType', 'device.osVersion', 'app.deviceManagementType', 'app.deviceManufacturer')
-                    $operators = @('eq', 'ne', 'in', 'notIn', 'contains', 'notContains', 'startsWith', 'notStartsWith')
-                    $listOperators = @('in', 'notIn', 'contains', 'notContains')
                     $clauses = [Collections.Generic.List[object]]::new()
                     do {
                         Write-Host ("=== Clause {0} ===" -f ($clauses.Count + 1)) -ForegroundColor Cyan
-                        for ($index = 0; $index -lt $commonProperties.Count; $index++) { Write-Host ("  [{0}] {1}" -f ($index + 1), $commonProperties[$index]) }
-                        Write-Host '  [O] Other (type it)'
-                        $propertyAllowed = @(@(1..$commonProperties.Count | ForEach-Object { [string]$_ }) + 'O')
-                        $propertyChoice = Read-NSPMenuChoice -Prompt 'Property' -Allowed $propertyAllowed -Default '1'
-                        $property = if ($propertyChoice -eq 'O') { Read-Host 'Property (e.g. device.osVersion)' } else { $commonProperties[[int]$propertyChoice - 1] }
-
-                        for ($index = 0; $index -lt $operators.Count; $index++) { Write-Host ("  [{0}] {1}" -f ($index + 1), $operators[$index]) }
-                        $operatorChoice = Read-NSPMenuChoice -Prompt 'Operator' -Allowed @(1..$operators.Count | ForEach-Object { [string]$_ }) -Default '1'
-                        $operator = $operators[[int]$operatorChoice - 1]
-
-                        $value = $null
-                        if ($property -eq 'device.enrollmentProfileName') {
-                            Write-Host 'Harvesting Windows Autopilot deployment profile names...' -ForegroundColor DarkGray
-                            $profiles = @(Get-NSPIntuneEnrollmentProfileNames -TenantId $registration.TenantId -ClientId $registration.ClientId)
-                            if ($profiles.Count -eq 0) {
-                                Write-Warning 'No Autopilot deployment profiles were found. Falling back to free text.'
-                            } else {
-                                for ($index = 0; $index -lt $profiles.Count; $index++) { Write-Host ("  [{0}] {1}" -f ($index + 1), $profiles[$index].DisplayName) }
-                                $profilePick = Read-Host ("Profile number(s), comma-separated for {0}" -f $operator)
-                                $pickedIndexes = @($profilePick -split ',' | ForEach-Object Trim | Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ - 1 })
-                                $value = @($pickedIndexes | ForEach-Object { $profiles[$_].DisplayName })
-                            }
+                        Write-Host '  [P] Single property clause'
+                        Write-Host '  [G] Group of clauses joined by OR (e.g. manufacturer is Dell OR HP)'
+                        $clauseKind = Read-NSPMenuChoice -Prompt 'Clause type' -Allowed @('P', 'G') -Default 'P'
+                        if ($clauseKind -eq 'G') {
+                            $groupClauses = [Collections.Generic.List[object]]::new()
+                            do {
+                                Write-Host ("--- OR-group clause {0} ---" -f ($groupClauses.Count + 1)) -ForegroundColor DarkCyan
+                                $groupClauses.Add((Read-NSPFilterClause -TenantId $registration.TenantId -ClientId $registration.ClientId -Platform $platform))
+                                $addAnotherInGroup = Read-NSPMenuChoice -Prompt 'Add another clause to this OR-group? [Y/N]' -Allowed @('Y', 'N') -Default 'N'
+                            } while ($addAnotherInGroup -eq 'Y')
+                            $clauses.Add(@{ Operator = 'or'; Clauses = @($groupClauses) })
+                        } else {
+                            $clauses.Add((Read-NSPFilterClause -TenantId $registration.TenantId -ClientId $registration.ClientId -Platform $platform))
                         }
-                        if (-not $value) {
-                            if ($operator -in $listOperators) {
-                                $rawValue = Read-Host 'Value(s), comma-separated'
-                                $value = @($rawValue -split ',' | ForEach-Object Trim | Where-Object { $_ })
-                            } else {
-                                $value = Read-Host "Value (or 'Null')"
-                            }
-                        }
-                        $clauses.Add(@{ Property = $property; Operator = $operator; Value = $value })
 
                         $addAnother = Read-NSPMenuChoice -Prompt 'Add another clause (joined with AND)? [Y/N]' -Allowed @('Y', 'N') -Default 'N'
                     } while ($addAnother -eq 'Y')
@@ -478,6 +439,128 @@ function Start-NSPIntuneApps {
                         $result | Format-List
                     } else {
                         Write-Host 'No changes were made.' -ForegroundColor Yellow
+                    }
+                }
+            }
+            '16' {
+                $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+                if (-not (Test-Path -LiteralPath $registrationPath)) {
+                    Write-Warning 'No tenant app registration is recorded. Use [11] first.'
+                } else {
+                    $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+                    $assignmentInventoryRoot = Join-Path $RepoRoot '.nsp-intuneapps\assignment-inventory'
+                    $latestAssignmentInventory = if (Test-Path -LiteralPath $assignmentInventoryRoot) { Get-ChildItem -LiteralPath $assignmentInventoryRoot -Filter '*.json' -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 } else { $null }
+                    $knownGroups = if ($latestAssignmentInventory) { @((Get-Content -LiteralPath $latestAssignmentInventory.FullName -Raw | ConvertFrom-Json).DistinctGroups) } else { @() }
+
+                    Write-Host '[1] View/edit the tenant''s master default groups (applied to every newly created app)' -ForegroundColor Cyan
+                    Write-Host '[2] View/edit one app''s assignment override'
+                    $sub = Read-NSPMenuChoice -Prompt 'Action' -Allowed @('1', '2') -Default '1'
+
+                    if ($sub -eq '1') {
+                        $current = Get-NSPTenantAssignmentDefaults -RepoRoot $RepoRoot -TenantId $registration.TenantId
+                        Write-Host "Current master assignment groups for tenant $($registration.TenantId):" -ForegroundColor Cyan
+                        if (@($current.DefaultAssignments).Count -eq 0) {
+                            Write-Host '  (none configured - newly created apps get no automatic assignment)' -ForegroundColor DarkGray
+                        } else {
+                            $current.DefaultAssignments | Format-Table TargetType, GroupDisplayName, Mode, Intent, FilterDisplayName -AutoSize
+                        }
+                        $editChoice = Read-NSPMenuChoice -Prompt 'Replace this list now? [Y/N]' -Allowed @('Y', 'N') -Default 'N'
+                        if ($editChoice -eq 'Y') {
+                            $entries = [Collections.Generic.List[object]]::new()
+                            do {
+                                Write-Host ("=== Master group {0} ===" -f ($entries.Count + 1)) -ForegroundColor Cyan
+                                $target = Invoke-NSPAssignmentTargetPicker -TenantId $registration.TenantId -ClientId $registration.ClientId -KnownGroups $knownGroups
+                                $modeAndIntent = Read-NSPAssignmentModeAndIntent -TargetType $target.TargetType
+                                $entries.Add(@{ TargetType = $target.TargetType; GroupId = $target.Id; GroupDisplayName = $target.DisplayName; Mode = $modeAndIntent.Mode; Intent = $modeAndIntent.Intent })
+                                $addAnother = Read-NSPMenuChoice -Prompt 'Add another master group? [Y/N]' -Allowed @('Y', 'N') -Default 'N'
+                            } while ($addAnother -eq 'Y')
+
+                            $saveResult = Set-NSPTenantAssignmentDefaults -RepoRoot $RepoRoot -TenantId $registration.TenantId -DefaultAssignments @($entries) -Confirm:$false
+                            Write-Host "Saved $($saveResult.Count) master assignment group(s) for tenant $($registration.TenantId)." -ForegroundColor Green
+                            Write-Host 'These apply to every newly created app unless it has its own override (option 2 above).' -ForegroundColor DarkGray
+                        }
+                    } else {
+                        $deployableCatalog = @($catalog | Where-Object Classification -eq 'Deployable' | Sort-Object Name)
+                        if ($deployableCatalog.Count -eq 0) {
+                            Write-Warning 'No deployable catalog entries were found.'
+                        } else {
+                            for ($index = 0; $index -lt $deployableCatalog.Count; $index++) { Write-Host ("  [{0}] {1}" -f ($index + 1), $deployableCatalog[$index].Name) }
+                            $appChoice = Read-NSPMenuChoice -Prompt 'App' -Allowed @(1..$deployableCatalog.Count | ForEach-Object { [string]$_ })
+                            $targetAppName = $deployableCatalog[[int]$appChoice - 1].Name
+
+                            $existingOverride = Get-NSPAppAssignmentOverride -RepoRoot $RepoRoot -TenantId $registration.TenantId -AppName $targetAppName
+                            if (-not $existingOverride.HasOverride) {
+                                Write-Host "'$targetAppName' has no override recorded; it currently falls back to the tenant's master groups." -ForegroundColor DarkGray
+                            } elseif (@($existingOverride.AssignmentOverride).Count -eq 0) {
+                                Write-Host "'$targetAppName' has an override recorded that assigns it to nothing." -ForegroundColor DarkGray
+                            } else {
+                                Write-Host "Current override for '$targetAppName':" -ForegroundColor Cyan
+                                $existingOverride.AssignmentOverride | Format-Table TargetType, GroupDisplayName, Mode, Intent, FilterDisplayName -AutoSize
+                            }
+
+                            Write-Host '[1] Replace the override with a new list' -ForegroundColor Cyan
+                            Write-Host '[2] Set the override to "assign nothing"'
+                            Write-Host '[3] Clear the override (fall back to the tenant''s master groups)'
+                            Write-Host '[N] No change'
+                            $overrideAction = Read-NSPMenuChoice -Prompt 'Action' -Allowed @('1', '2', '3', 'N') -Default 'N'
+                            if ($overrideAction -eq '3') {
+                                Set-NSPAppAssignmentOverride -RepoRoot $RepoRoot -TenantId $registration.TenantId -AppName $targetAppName -Clear -Confirm:$false | Out-Null
+                                Write-Host "Cleared the override for '$targetAppName'." -ForegroundColor Green
+                            } elseif ($overrideAction -eq '2') {
+                                Set-NSPAppAssignmentOverride -RepoRoot $RepoRoot -TenantId $registration.TenantId -AppName $targetAppName -AssignmentOverride @() -Confirm:$false | Out-Null
+                                Write-Host "'$targetAppName' will now be assigned to nothing, regardless of the tenant's master groups." -ForegroundColor Green
+                            } elseif ($overrideAction -eq '1') {
+                                $entries = [Collections.Generic.List[object]]::new()
+                                do {
+                                    Write-Host ("=== Override group {0} ===" -f ($entries.Count + 1)) -ForegroundColor Cyan
+                                    $target = Invoke-NSPAssignmentTargetPicker -TenantId $registration.TenantId -ClientId $registration.ClientId -KnownGroups $knownGroups
+                                    $modeAndIntent = Read-NSPAssignmentModeAndIntent -TargetType $target.TargetType
+                                    $entries.Add(@{ TargetType = $target.TargetType; GroupId = $target.Id; GroupDisplayName = $target.DisplayName; Mode = $modeAndIntent.Mode; Intent = $modeAndIntent.Intent })
+                                    $addAnother = Read-NSPMenuChoice -Prompt "Add another group to this app's override? [Y/N]" -Allowed @('Y', 'N') -Default 'N'
+                                } while ($addAnother -eq 'Y')
+
+                                $saveResult = Set-NSPAppAssignmentOverride -RepoRoot $RepoRoot -TenantId $registration.TenantId -AppName $targetAppName -AssignmentOverride @($entries) -Confirm:$false
+                                Write-Host "Saved $($saveResult.Count) override entry/entries for '$targetAppName'." -ForegroundColor Green
+                            } else {
+                                Write-Host 'No changes were made.' -ForegroundColor Yellow
+                            }
+                        }
+                    }
+                }
+            }
+            '17' {
+                $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+                if (-not (Test-Path -LiteralPath $registrationPath)) {
+                    Write-Warning 'No tenant app registration is recorded. Use [11] first.'
+                } else {
+                    $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+                    Write-Host 'A delegated browser login may open. This reads every Win32 app''s supersedence relationships - no tenant data is changed.' -ForegroundColor Yellow
+                    $candidates = Get-NSPIntuneAppRetirementCandidates -RepoRoot $RepoRoot -Connect
+                    $candidateList = @($candidates.Candidates)
+                    if ($candidateList.Count -eq 0) {
+                        Write-Host 'No retirement candidates were found (no NSP-managed app currently supersedes another NSP-managed app).' -ForegroundColor DarkGray
+                    } else {
+                        Write-Host 'Superseded apps eligible for retirement:' -ForegroundColor Cyan
+                        for ($index = 0; $index -lt $candidateList.Count; $index++) {
+                            $candidate = $candidateList[$index]
+                            Write-Host ("  [{0}] {1} -> superseded by {2} ({3})" -f ($index + 1), $candidate.SupersededDisplayName, $candidate.SupersedingDisplayName, $candidate.SupersedenceType)
+                        }
+                        Write-Host '  [N] None - do not retire anything now'
+                        $retireAllowed = @(@(1..$candidateList.Count | ForEach-Object { [string]$_ }) + 'N')
+                        $retireChoice = Read-NSPMenuChoice -Prompt 'Retire which superseded app' -Allowed $retireAllowed -Default 'N'
+                        if ($retireChoice -ne 'N') {
+                            $target = $candidateList[[int]$retireChoice - 1]
+                            $preview = Remove-NSPIntuneWin32App -IntuneObjectId $target.SupersededAppId -DisplayName $target.SupersededDisplayName -TenantId $candidates.TenantId -ClientId $registration.ClientId
+                            $preview | Format-List
+                            Write-Warning "This permanently deletes '$($target.SupersededDisplayName)', which was superseded by '$($target.SupersedingDisplayName)' ($($target.SupersedenceType)). It cannot be undone."
+                            $confirmText = Read-Host "Type the app's exact display name to confirm retirement, or press Enter to cancel"
+                            if ($confirmText -eq $target.SupersededDisplayName) {
+                                $result = Remove-NSPIntuneWin32App -IntuneObjectId $target.SupersededAppId -DisplayName $target.SupersededDisplayName -TenantId $candidates.TenantId -ClientId $registration.ClientId -Execute -Confirm:$false
+                                $result | Format-List
+                            } else {
+                                Write-Host 'No changes were made.' -ForegroundColor Yellow
+                            }
+                        }
                     }
                 }
             }

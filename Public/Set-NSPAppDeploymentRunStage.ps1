@@ -9,7 +9,8 @@ function Set-NSPAppDeploymentRunStage {
         [Parameter(Mandatory)][string]$AppName,
         [Parameter(Mandatory)][string]$Stage,
         [Parameter(Mandatory)][ValidateSet('Running','Succeeded','Failed')][string]$Status,
-        [string]$Message
+        [string]$Message,
+        [string]$IntuneObjectId
     )
 
     $resolvedRunPath = (Resolve-Path -LiteralPath $RunPath -ErrorAction Stop).Path
@@ -64,6 +65,7 @@ function Set-NSPAppDeploymentRunStage {
     }
     $stageRecord.Status = $Status
     $stageRecord.Message = $Message
+    if ($IntuneObjectId) { $entry.IntuneObjectId = $IntuneObjectId }
     $run.LastUpdatedAtUtc = $now
     $run.Events = @($run.Events) + @([ordered]@{ AtUtc=$now; Type='StageTransition'; App=$AppName; Stage=$Stage; Status=$Status; Message=$Message })
 

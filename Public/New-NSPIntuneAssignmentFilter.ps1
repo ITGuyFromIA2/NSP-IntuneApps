@@ -6,14 +6,18 @@ function New-NSPIntuneAssignmentFilter {
         Plan-only is the default. Use -Execute and approve ShouldProcess to actually create it
         in the tenant. Pass -Rule directly to skip clause assembly (a rule authored by hand or
         copied from an existing filter), or -Clauses to have Build-NSPAssignmentFilterRule
-        assemble one AND-joined chain. OR and explicit grouping are not yet supported - see
-        Build-NSPAssignmentFilterRule for why that's deliberate.
+        assemble it. Each entry in -Clauses is either a leaf (Property/Operator/Value) or a
+        nested group (its own Clauses array, optionally its own Operator) - see
+        Build-NSPAssignmentFilterRule for the exact shape and parenthesization rules.
+        -TopLevelOperator joins the top-level -Clauses themselves ('and' by default, matching
+        every existing caller).
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'Clauses')]
     param(
         [Parameter(Mandatory)][string]$DisplayName,
         [Parameter(Mandatory)][string]$Platform,
         [Parameter(Mandatory, ParameterSetName = 'Clauses')][object[]]$Clauses,
+        [Parameter(ParameterSetName = 'Clauses')][ValidateSet('and', 'or')][string]$TopLevelOperator = 'and',
         [Parameter(Mandatory, ParameterSetName = 'RawRule')][string]$Rule,
         [ValidateSet('devices', 'apps')][string]$ManagementType = 'devices',
         [Parameter(Mandatory)][string]$TenantId,
@@ -21,7 +25,7 @@ function New-NSPIntuneAssignmentFilter {
         [switch]$Execute
     )
 
-    $resolvedRule = if ($PSCmdlet.ParameterSetName -eq 'RawRule') { $Rule } else { Build-NSPAssignmentFilterRule -Clauses $Clauses }
+    $resolvedRule = if ($PSCmdlet.ParameterSetName -eq 'RawRule') { $Rule } else { Build-NSPAssignmentFilterRule -Clauses $Clauses -Operator $TopLevelOperator }
 
     if (-not $Execute) {
         return [pscustomobject]@{

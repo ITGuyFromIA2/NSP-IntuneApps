@@ -50,6 +50,13 @@
         'New-NSPIntuneAssignmentFilter'
         'Find-NSPIntuneGroup'
         'Get-NSPIntuneEnrollmentProfileNames'
+        'Get-NSPTenantAssignmentDefaults'
+        'Set-NSPTenantAssignmentDefaults'
+        'Get-NSPAppAssignmentOverride'
+        'Set-NSPAppAssignmentOverride'
+        'Update-NSPIntuneWin32AppMetadata'
+        'Add-NSPIntuneWin32AppSupersedence'
+        'Get-NSPIntuneAppRetirementCandidates'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
