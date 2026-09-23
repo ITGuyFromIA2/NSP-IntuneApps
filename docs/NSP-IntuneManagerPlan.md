@@ -2,8 +2,13 @@
 
 This is the working roadmap for the future tenant-wide manager `docs/Architecture.md` names but
 does not detail. That file stays a short boundary statement by design; this document is where the
-actual plan lives. No `NSP-IntuneManager` repository exists yet - see [Open questions](#open-questions)
-below for what has to be decided before one is created.
+actual plan lives.
+
+The repository exists: `C:\GitRepo\NSP-PoSHToolkits\NSP-IntuneManager` (decided and created
+2026-09-23). `NSP-PoSHToolkits` is a plain filesystem folder, not itself a git repo - each tool
+under it (`NSP-Console`, `NSP-LogParse`, now `NSP-IntuneManager`) is its own independent git
+repository, consistent with the one-repo-per-tool convention below. `NSP-IntuneManager` is
+currently just `.git` + `.gitattributes` - no source yet.
 
 ## Charter
 
@@ -44,12 +49,64 @@ handoff cheap:
 
 ## Repo model
 
-A separate repository, following the same one-repo-per-tool convention `NSP-IntuneApps` itself
-uses (`PLAN.md`: "the recommended one-repository-per-tool model"). Client-specific manager
-deployments would fork it the same way client `IntuneApps-<Client>` repos fork `NSP-IntuneApps`
-today - see `HowToFork.txt` for the proven pattern (`git remote add upstream`, periodic
-`git fetch upstream && git merge upstream/main`). That pattern is already validated in production
-across multiple client forks of this repo.
+`C:\GitRepo\NSP-PoSHToolkits\NSP-IntuneManager` - its own git repository, following the same
+one-repo-per-tool convention `NSP-IntuneApps` itself uses (`PLAN.md`: "the recommended
+one-repository-per-tool model"), just filed under the `NSP-PoSHToolkits` grouping folder alongside
+`NSP-Console` and `NSP-LogParse` rather than directly under `C:\GitRepo`.
+
+Whether client-specific manager deployments fork it the same way client `IntuneApps-<Client>`
+repos fork `NSP-IntuneApps` today (`HowToFork.txt`'s proven `git remote add upstream` /
+`git fetch upstream && git merge upstream/main` pattern) depends on the multi-tenant decision
+below - a single manager instance covering many client tenants centrally doesn't need per-client
+forks the way per-client app catalogs do.
+
+## App registration
+
+**Decided: a separate app registration**, not a reuse of `NSP-IntuneApps`' existing one. The
+manager's Graph scope surface (RBAC, groups, configuration/compliance policy write access) is
+materially broader than anything Apps needs - sharing one registration would grant Apps' own
+registration those broader permissions even when Apps itself never uses them.
+
+Carry over the exact lesson this session spent real effort learning the hard way in
+`NSP-IntuneApps`: centralize the manager's own required-scopes list in one place (its own
+`Get-NSP*GraphRoutineScopes`-equivalent) and make every routine `Connect-*Graph` call site use it,
+including the registration bootstrap's own granted-permissions list - **never** a second literal
+copy of the same scopes. A drifted duplicate is exactly what caused repeated, unexplained
+reconnect prompts in `NSP-IntuneApps` (`Get-NSPCodeSigningTrustPlan` requesting its own narrower
+ad-hoc list, and separately the registration bootstrap duplicating the scope list instead of
+referencing it) - both fixed this session, but worth not re-introducing from scratch in a new repo.
+
+## Multi-tenant design
+
+Not originally planned as multi-tenant - reconsidered after reviewing an existing multi-tenant
+pattern already proven in production: the Exchange Online DirectSend script
+(`AIO_-_V4.ps1`, Office 365 Best Practices Configurations). That script holds several **simultaneous**
+tenant connections in one process by using `Connect-ExchangeOnline -Prefix <T0|T1|...>`, tracking
+each in a `$script:ConnPrefixMap` (ConnectionId -> Prefix) plus an `$script:ActivePrefix` for
+"which tenant is current," with a connection-management menu to list/switch/add/disconnect and a
+session cache file to restore across runs.
+
+**This exact mechanism cannot be ported to Microsoft Graph.** `-Prefix` is a feature specific to
+the `ExchangeOnlineManagement` module. `Microsoft.Graph.Authentication`'s `Connect-MgGraph` has no
+equivalent - `Get-MgContext` returns exactly one context per process, full stop. `Connect-NSPGraph`
+(`NSP-IntuneApps`) already works around the single-context model by reconnecting only when the
+current context doesn't match what's requested; that's the ceiling of what the SDK's own session
+model allows, not a workaround waiting to be lifted.
+
+To get genuinely concurrent multi-tenant sessions (switch between tenants without a reconnect,
+the way the Exchange script does), the manager would have to bypass `Connect-MgGraph`/
+`Invoke-MgGraphRequest` entirely for its own calls: acquire and cache one token per tenant
+directly (MSAL.PS or the underlying MSAL library), then call Graph via plain
+`Invoke-RestMethod -Headers @{ Authorization = "Bearer $token" }` instead of the SDK's cmdlets,
+refreshing each tenant's token independently. That's a real, buildable equivalent of the
+`ConnPrefixMap`/`ActivePrefix` pattern - just implemented against MSAL instead of a
+module-provided `-Prefix`, and a materially bigger build than anything in `NSP-IntuneApps` today.
+
+**Not yet decided**: whether that investment is worth it for v0.1, or whether the manager starts
+single-tenant-at-a-time (reconnect to switch tenants, same model `NSP-IntuneApps` already uses)
+and multi-tenant concurrency is a later milestone once the MVP proves out. Given how many client
+tenants this practice already operates across, the concurrent model is plausibly worth it - but
+it's a scope decision for the user, not a default to assume.
 
 ## MVP scope
 
@@ -85,17 +142,15 @@ so it isn't forgotten or rediscovered as "surprising" tech debt later.
 
 ## Open questions
 
-Not yet decided - needed before a real `NSP-IntuneManager` repository is created:
+Resolved: repo location (`NSP-PoSHToolkits\NSP-IntuneManager`) and app registration (separate,
+not shared with Apps) - see above. Still not decided:
 
-- **Target repo name and location.** Which private org/host, and what repo name (matching the
-  `NSP-<Purpose>` convention this codebase already uses)?
-- **App registration.** Does the manager reuse `NSP-IntuneApps`' existing tenant app registration,
-  or register its own? The manager's Graph scope surface is materially broader (RBAC, groups,
-  configuration/compliance policy write access) than anything Apps needs today - sharing one
-  registration would grant Apps' own registration those broader permissions even when Apps itself
-  never uses them, which argues for a separate registration scoped to only what the manager needs.
-- **Inventory/blueprint storage at manager scale.** `NSP-IntuneApps` uses flat JSON files under
+- **Multi-tenant concurrency** (see above) - single-tenant-at-a-time for v0.1 with concurrent
+  multi-tenant sessions as a later milestone, or build the MSAL-based concurrent token cache from
+  the start?
+- **Inventory/blueprint storage at scale.** `NSP-IntuneApps` uses flat JSON files under
   `.nsp-intuneapps/` for saved inventories and plans, which works for one tenant's app catalog.
   Whether that same approach scales once the manager is tracking config profiles, compliance
-  policies, and filter blueprints across a growing number of client tenants is worth deciding
+  policies, and filter blueprints across a growing number of client tenants - and, if multi-tenant
+  concurrency is in scope, across multiple tenants' data in the same process - is worth deciding
   deliberately rather than defaulting to "just do what Apps does."
