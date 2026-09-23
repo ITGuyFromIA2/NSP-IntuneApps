@@ -22,6 +22,8 @@ The future manager is the tenant-wide orchestration and inventory layer. Expecte
 
 The manager should consume app plans from this repository rather than absorb app source and packaging internals.
 
+The working roadmap - charter, relationship to this repo, repo model, MVP scope, and open questions - is [docs/NSP-IntuneManagerPlan.md](NSP-IntuneManagerPlan.md). Note its migration section: `New-NSPCookieCutterAssignmentFilters`/`Get-NSPCookieCutterFilterBlueprints` currently live in this repo as a documented interim placement, since they belong to the "assignment filters and cookie-cutter filter generation" domain above - they should move once the manager's MVP absorbs that domain.
+
 ## Targeting contract
 
 App definitions may request targeting using stable references such as group object IDs, filter object IDs with include/exclude mode, and an enrollment-profile selector. This repository may validate and display those references. Creation, lifecycle management, and tenant-wide reuse of groups, filters, and enrollment-profile mappings belongs to `NSP-IntuneManager`.
