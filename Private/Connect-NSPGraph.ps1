@@ -15,6 +15,13 @@ function Connect-NSPGraph {
         insufficient - missing a scope, or authenticated as a different app/tenant than
         requested. Reconnecting unconditionally on every call was itself a source of repeated
         sign-in prompts even when a perfectly good session already existed this process.
+
+        -UseDeviceCode requests the "go to microsoft.com/devicelogin and enter this code" flow
+        instead of Windows' native broker (WAM) sign-in, which is Connect-MgGraph's default on
+        Windows. The WAM popup can open behind other windows in an embedded terminal and has a
+        short interaction timeout, so losing focus for even a few seconds surfaces as
+        "User canceled authentication" - not an actual cancel. Device code has no window to lose
+        focus, at the cost of an extra copy/paste step.
     #>
     [CmdletBinding()]
     param(
@@ -22,7 +29,8 @@ function Connect-NSPGraph {
         [switch]$Connect,
         [switch]$Optional,
         [string]$ClientId,
-        [string]$TenantId
+        [string]$TenantId,
+        [switch]$UseDeviceCode
     )
 
     if ($Connect) {
@@ -40,6 +48,7 @@ function Connect-NSPGraph {
             $connectArgs = @{ Scopes = $Scopes; NoWelcome = $true }
             if ($ClientId) { $connectArgs.ClientId = $ClientId }
             if ($TenantId) { $connectArgs.TenantId = $TenantId }
+            if ($UseDeviceCode) { $connectArgs.UseDeviceCode = $true }
             Connect-MgGraph @connectArgs | Out-Null
         }
     }

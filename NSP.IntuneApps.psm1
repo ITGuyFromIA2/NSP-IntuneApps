@@ -52,6 +52,7 @@ Export-ModuleMember -Function @(
     'Get-NSPIntuneAppAssignmentInventory'
     'New-NSPIntuneWin32AppAssignment'
     'New-NSPIntuneAssignmentFilter'
+    'New-NSPCookieCutterAssignmentFilters'
     'Find-NSPIntuneGroup'
     'Get-NSPIntuneEnrollmentProfileNames'
     'Get-NSPTenantAssignmentDefaults'

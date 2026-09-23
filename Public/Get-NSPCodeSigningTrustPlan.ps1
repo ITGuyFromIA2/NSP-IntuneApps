@@ -8,8 +8,7 @@ function Get-NSPCodeSigningTrustPlan {
         [Parameter(Mandatory)][string]$RepoRoot,
         [ValidateSet('AllDevices','Group','None')][string]$AssignmentTarget = 'AllDevices',
         [string]$GroupId,
-        [switch]$Connect,
-        [switch]$WriteAccess
+        [switch]$Connect
     )
 
     $config = Get-NSPCodeSigningConfiguration -RepoRoot $RepoRoot
@@ -23,8 +22,11 @@ function Get-NSPCodeSigningTrustPlan {
     }
     if ($AssignmentTarget -eq 'Group' -and [string]::IsNullOrWhiteSpace($GroupId)) { throw 'GroupId is required when AssignmentTarget is Group.' }
 
-    $requiredScopes = if ($WriteAccess) { @('DeviceManagementConfiguration.ReadWrite.All') } else { @('DeviceManagementConfiguration.Read.All') }
-    if ($AssignmentTarget -eq 'Group') { $requiredScopes += 'Group.Read.All' }
+    # Requesting the shared routine scope set (not a narrower ad-hoc list) matches every other
+    # routine Connect-NSPGraph call, so this action doesn't force a second sign-in mid-session
+    # when it runs alongside others that already requested the full set - see
+    # Get-NSPGraphRoutineScopes for why a different scope string reprompts even mid-session.
+    $requiredScopes = Get-NSPGraphRoutineScopes
     $context = Connect-NSPGraph -Scopes $requiredScopes -Connect:$Connect -Optional
     $assignmentDisplayName = if ($AssignmentTarget -eq 'AllDevices') { 'All devices' } elseif ($AssignmentTarget -eq 'None') { 'No assignment' } else { $null }
     if ($context -and $AssignmentTarget -eq 'Group') {

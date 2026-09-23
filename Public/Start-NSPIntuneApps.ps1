@@ -55,9 +55,10 @@ function Start-NSPIntuneApps {
         Write-Host '  [15] Build and create an assignment filter'
         Write-Host '  [16] Manage master assignment groups (tenant defaults + per-app overrides)'
         Write-Host '  [17] Review and retire superseded apps (separate, explicitly approved)' -ForegroundColor Red
+        Write-Host '  [18] Deploy the standard cookie-cutter assignment filter set'
         Write-Host ''
         Write-Host '  [Q] Quit'
-        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','Q')
+        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','Q')
 
         if ($choice -ne 'Q') {
             $actionTitles = @{
@@ -70,6 +71,7 @@ function Start-NSPIntuneApps {
                 '13' = 'Save a read-only app assignment and filter inventory'
                 '14' = 'Assign an app to a group'; '15' = 'Build and create an assignment filter'
                 '16' = 'Manage master assignment groups'; '17' = 'Review and retire superseded apps'
+                '18' = 'Deploy the standard cookie-cutter assignment filter set'
             }
             Write-NSPDashboardHeader -Title $actionTitles[$choice] -StatusLines @($graphStatus)
         }
@@ -96,7 +98,10 @@ function Start-NSPIntuneApps {
                         Write-Warning 'No tenant app registration is recorded. Use [11] first.'
                     } else {
                         $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
-                        Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect -ClientId $registration.ClientId -TenantId $registration.TenantId | Out-Null
+                        Write-Host '[B] Browser/broker sign-in (default)'
+                        Write-Host '[V] Device code (use this if the broker window opens hidden or times out, e.g. in an embedded terminal)'
+                        $signInChoice = Read-NSPMenuChoice -Prompt 'Sign-in method' -Allowed @('B', 'V') -Default 'B'
+                        Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect -ClientId $registration.ClientId -TenantId $registration.TenantId -UseDeviceCode:($signInChoice -eq 'V') | Out-Null
                         Write-Host 'Connected.' -ForegroundColor Green
                     }
                 } elseif ($graphChoice -eq 'D') {
@@ -611,6 +616,32 @@ function Start-NSPIntuneApps {
                             } else {
                                 Write-Host 'No changes were made.' -ForegroundColor Yellow
                             }
+                        }
+                    }
+                }
+            }
+            '18' {
+                $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+                if (-not (Test-Path -LiteralPath $registrationPath)) {
+                    Write-Warning 'No tenant app registration is recorded. Use [11] first.'
+                } else {
+                    $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+                    $blueprints = @(Get-NSPCookieCutterFilterBlueprints)
+                    Write-Host "Standard set ($($blueprints.Count) filters, built from stable device/app properties only - safe to deploy unchanged to any tenant):" -ForegroundColor Cyan
+                    $blueprints | Format-Table DisplayName, Platform, Rule -Wrap
+                    $preview = New-NSPCookieCutterAssignmentFilters -TenantId $registration.TenantId -ClientId $registration.ClientId
+                    Write-Host "Already present: $($preview.AlreadyExists) | To create: $($preview.Planned)" -ForegroundColor Cyan
+                    $toCreate = @($preview.Results | Where-Object Status -eq 'PlanOnly')
+                    if ($toCreate.Count -eq 0) {
+                        Write-Host 'Every filter in the standard set already exists in this tenant. Nothing to do.' -ForegroundColor Green
+                    } else {
+                        $toCreate | Format-Table DisplayName, Platform, Rule -Wrap
+                        $executeChoice = Read-NSPMenuChoice -Prompt "Create these $($toCreate.Count) filter(s) now? [Y/N]" -Allowed @('Y', 'N') -Default 'N'
+                        if ($executeChoice -eq 'Y') {
+                            $result = New-NSPCookieCutterAssignmentFilters -TenantId $registration.TenantId -ClientId $registration.ClientId -Execute -Confirm:$false
+                            $result.Results | Format-Table Status, DisplayName, Id -AutoSize
+                        } else {
+                            Write-Host 'No changes were made.' -ForegroundColor Yellow
                         }
                     }
                 }

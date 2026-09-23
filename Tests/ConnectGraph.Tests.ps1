@@ -68,6 +68,32 @@ Describe 'Connect-NSPGraph' {
                 }
             }
         }
+
+        It 'omits UseDeviceCode by default, leaving Connect-MgGraph on its native broker flow' {
+            InModuleScope NSP.IntuneApps {
+                Mock Connect-MgGraph { } -ModuleName NSP.IntuneApps
+                function Get-MgContext { $null }
+
+                Connect-NSPGraph -Scopes 'DeviceManagementApps.Read.All' -Connect -Optional | Out-Null
+
+                Should -Invoke Connect-MgGraph -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+                    -not $PSBoundParameters.ContainsKey('UseDeviceCode')
+                }
+            }
+        }
+
+        It 'passes UseDeviceCode through when requested, to avoid the WAM broker popup' {
+            InModuleScope NSP.IntuneApps {
+                Mock Connect-MgGraph { } -ModuleName NSP.IntuneApps
+                function Get-MgContext { $null }
+
+                Connect-NSPGraph -Scopes 'DeviceManagementApps.Read.All' -Connect -UseDeviceCode -Optional | Out-Null
+
+                Should -Invoke Connect-MgGraph -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+                    $UseDeviceCode -eq $true
+                }
+            }
+        }
     }
 
     Context 'avoiding a redundant reconnect' {

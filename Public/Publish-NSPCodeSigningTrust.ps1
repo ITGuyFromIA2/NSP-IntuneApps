@@ -15,7 +15,7 @@ function Publish-NSPCodeSigningTrust {
         [switch]$Execute
     )
 
-    $plan = Get-NSPCodeSigningTrustPlan -RepoRoot $RepoRoot -AssignmentTarget $AssignmentTarget -GroupId $GroupId -Connect:$Execute -WriteAccess:$Execute
+    $plan = Get-NSPCodeSigningTrustPlan -RepoRoot $RepoRoot -AssignmentTarget $AssignmentTarget -GroupId $GroupId -Connect:$Execute
     if (-not $Execute) { return $plan }
     if (@($plan.Conflicts).Count -gt 0) { throw "Execution stopped because conflicts were found: $($plan.Conflicts -join '; ')" }
     if (-not $plan.CanExecute) { throw 'The plan is not executable. Confirm Graph authentication and resolve any conflicts.' }
