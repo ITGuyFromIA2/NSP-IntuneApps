@@ -2,10 +2,20 @@ function Set-NSPAppDeploymentDecisions {
     <#
     .SYNOPSIS
         Records an explicit yes/skip decision for each app in a local plan.
+    .DESCRIPTION
+        Interactive by default (prompts once per pending entry; [Q] stops early and saves
+        progress). Pass -Decisions to apply decisions non-interactively instead, one entry per
+        pending plan entry, matched by Name: @{ Name; Decision = 'Approved'/'Skipped';
+        SupersedenceType = 'Update'/'Replace' (required only when approving a
+        CreateSupersedingApp entry) }. Every pending entry must have a matching decision, or this
+        throws rather than leaving one pending or guessing a default - this is the hook a future
+        NSP-IntuneManager needs to drive plan approval programmatically instead of through the
+        interactive dashboard.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory)][string]$PlanPath
+        [Parameter(Mandatory)][string]$PlanPath,
+        [object[]]$Decisions
     )
 
     $plan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json
@@ -19,6 +29,25 @@ function Set-NSPAppDeploymentDecisions {
         if (-not $entryReview.CanApprove) {
             throw "Plan entry '$($entry.Name)' cannot be approved: $($entryReview.Blocker)"
         }
+
+        if ($Decisions) {
+            $providedDecision = @($Decisions | Where-Object { [string]$_.Name -eq $entry.Name }) | Select-Object -First 1
+            if (-not $providedDecision) { throw "No decision was provided for pending plan entry '$($entry.Name)'." }
+            $decisionValue = [string]$providedDecision.Decision
+            if ($decisionValue -notin @('Approved', 'Skipped')) { throw "Decision for '$($entry.Name)' must be 'Approved' or 'Skipped', not '$decisionValue'." }
+            $entry.Decision = $decisionValue
+            $entry.ReviewedAt = (Get-Date).ToString('o')
+            if ($entry.Decision -eq 'Approved' -and $entryReview.PlannedAction -eq 'CreateSupersedingApp') {
+                $supersedenceType = [string]$providedDecision.SupersedenceType
+                if ($supersedenceType -notin @('Update', 'Replace')) { throw "Decision for '$($entry.Name)' approves a CreateSupersedingApp entry and needs SupersedenceType 'Update' or 'Replace', not '$supersedenceType'." }
+                $entry | Add-Member -NotePropertyName SupersedenceType -NotePropertyValue $supersedenceType -Force
+            }
+            if ($PSCmdlet.ShouldProcess($PlanPath, "Record $($entry.Decision) for $($entry.Name)")) {
+                $plan | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $PlanPath -Encoding UTF8
+            }
+            continue
+        }
+
         Write-NSPDashboardHeader -Title 'Deployment plan review' -StatusLines @(
             "Plan: $([IO.Path]::GetFileName($PlanPath))"
             "App $($entry.Order) of $(@($plan.Entries).Count): $($entry.Name)"
@@ -26,7 +55,7 @@ function Set-NSPAppDeploymentDecisions {
             "Targeting: $($review.Targeting)"
             "Action: $($entryReview.PlannedAction) | Existing object: $(if ($entryReview.ExistingObject) { $entryReview.ExistingObject } else { 'none' })"
             "Effect: $($entryReview.Effect)"
-            'Execution engine: not implemented; this decision only updates the local tracker'
+            'This decision only updates the local tracker; a later run stage performs the tenant write'
         )
         Write-Host '[Y] Approve this resolved action for the later execution stage'
         Write-Host '[N] Skip this app'
