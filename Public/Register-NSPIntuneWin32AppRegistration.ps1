@@ -25,13 +25,11 @@ function Register-NSPIntuneWin32AppRegistration {
 
     $graphAppId = '00000003-0000-0000-c000-000000000000'
     $appName = 'NSP-IntuneApps-Win32AppDeployment'
-    $requiredPermissionNames = @(
-        'DeviceManagementApps.ReadWrite.All'
-        'DeviceManagementConfiguration.ReadWrite.All'
-        'DeviceManagementRBAC.Read.All'
-        'Group.Read.All'
-        'DeviceManagementServiceConfig.ReadWrite.All'
-    )
+    # Grants exactly what Get-NSPGraphRoutineScopes requests - a literal duplicate list here would
+    # silently drift out of sync with it, and admin consent that's missing even one scope Connect-
+    # NSPGraph later requests forces a fresh interactive reconnect (the exact "random prompts"
+    # failure mode this repo has already chased down once).
+    $requiredPermissionNames = @(Get-NSPGraphRoutineScopes)
     $recordPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
 
     $connectScopes = @('Application.ReadWrite.All', 'Directory.ReadWrite.All', 'DelegatedPermissionGrant.ReadWrite.All')
