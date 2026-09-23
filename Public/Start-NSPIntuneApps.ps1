@@ -414,9 +414,9 @@ function Start-NSPIntuneApps {
 
                     $filterDisplayName = $null
                     $filterMode = $null
-                    $knownFilters = if ($latestAssignmentInventory) { @((Get-Content -LiteralPath $latestAssignmentInventory.FullName -Raw | ConvertFrom-Json).Filters) } else { @() }
+                    $knownFilters = if ($mode -eq 'Include') { @(Get-NSPIntuneAssignmentFilterList -TenantId $registration.TenantId -ClientId $registration.ClientId) } else { @() }
                     if ($mode -eq 'Include' -and @($knownFilters).Count -gt 0) {
-                        Write-Host 'Scope by an existing assignment filter? (Build one first with [15] if you need a new one.)' -ForegroundColor Cyan
+                        Write-Host 'Scope by an existing assignment filter? (Build one with [15], or deploy the standard set with [18], if you need a new one.)' -ForegroundColor Cyan
                         for ($index = 0; $index -lt $knownFilters.Count; $index++) { Write-Host ("  [{0}] {1} ({2})" -f ($index + 1), $knownFilters[$index].DisplayName, $knownFilters[$index].Platform) }
                         Write-Host '  [N] No filter'
                         $filterAllowed = @(@(1..$knownFilters.Count | ForEach-Object { [string]$_ }) + 'N')
@@ -635,13 +635,35 @@ function Start-NSPIntuneApps {
                     if ($toCreate.Count -eq 0) {
                         Write-Host 'Every filter in the standard set already exists in this tenant. Nothing to do.' -ForegroundColor Green
                     } else {
-                        $toCreate | Format-Table DisplayName, Platform, Rule -Wrap
-                        $executeChoice = Read-NSPMenuChoice -Prompt "Create these $($toCreate.Count) filter(s) now? [Y/N]" -Allowed @('Y', 'N') -Default 'N'
-                        if ($executeChoice -eq 'Y') {
-                            $result = New-NSPCookieCutterAssignmentFilters -TenantId $registration.TenantId -ClientId $registration.ClientId -Execute -Confirm:$false
-                            $result.Results | Format-Table Status, DisplayName, Id -AutoSize
+                        for ($index = 0; $index -lt $toCreate.Count; $index++) {
+                            Write-Host ("  [{0}] {1}" -f ($index + 1), $toCreate[$index].DisplayName)
+                        }
+                        Write-Host 'Enter numbers to create, comma-separated (e.g. 1,3,5). Leave blank for all, or enter 0 for none.' -ForegroundColor Cyan
+                        $selection = Read-Host 'Filters to create'
+                        $selectedNames = if ([string]::IsNullOrWhiteSpace($selection)) {
+                            @($toCreate.DisplayName)
+                        } elseif ($selection.Trim() -eq '0') {
+                            @()
                         } else {
+                            $indices = [Collections.Generic.List[int]]::new()
+                            foreach ($token in ($selection -split ',')) {
+                                $trimmed = $token.Trim()
+                                if (-not $trimmed) { continue }
+                                $parsed = 0
+                                if ([int]::TryParse($trimmed, [ref]$parsed) -and $parsed -ge 1 -and $parsed -le $toCreate.Count) {
+                                    $indices.Add($parsed - 1)
+                                } else {
+                                    Write-Warning "Ignoring invalid selection '$trimmed'."
+                                }
+                            }
+                            @($indices | Select-Object -Unique | ForEach-Object { $toCreate[$_].DisplayName })
+                        }
+
+                        if ($selectedNames.Count -eq 0) {
                             Write-Host 'No changes were made.' -ForegroundColor Yellow
+                        } else {
+                            $result = New-NSPCookieCutterAssignmentFilters -TenantId $registration.TenantId -ClientId $registration.ClientId -Include $selectedNames -Execute -Confirm:$false
+                            $result.Results | Format-Table Status, DisplayName, Id -AutoSize
                         }
                     }
                 }

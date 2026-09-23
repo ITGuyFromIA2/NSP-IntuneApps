@@ -51,6 +51,7 @@
         'New-NSPIntuneWin32AppAssignment'
         'New-NSPIntuneAssignmentFilter'
         'New-NSPCookieCutterAssignmentFilters'
+        'Get-NSPIntuneAssignmentFilterList'
         'Find-NSPIntuneGroup'
         'Get-NSPIntuneEnrollmentProfileNames'
         'Get-NSPTenantAssignmentDefaults'

@@ -15,18 +15,26 @@ function New-NSPCookieCutterAssignmentFilters {
         filters built from stable Graph properties and fixed enum values - no enrollment profile
         names, device categories, or hardcoded device lists, since those are tenant-specific and
         would silently do nothing (or worse, match nothing) if copied to a different tenant.
+
+        -Include restricts consideration to blueprints whose DisplayName matches (case-insensitive),
+        for callers that want to plan/create a hand-picked subset instead of the whole catalog.
+        Omit it (the default) to consider every blueprint.
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     param(
         [Parameter(Mandatory)][string]$TenantId,
         [Parameter(Mandatory)][string]$ClientId,
+        [string[]]$Include,
         [switch]$Execute
     )
 
     $graphContext = Connect-NSPGraph -Scopes (Get-NSPGraphRoutineScopes) -Connect -ClientId $ClientId -TenantId $TenantId
     $existingDisplayNames = @(Invoke-NSPGraphCollection -Uri 'https://graph.microsoft.com/beta/deviceManagement/assignmentFilters' | ForEach-Object { [string]$_.displayName })
 
-    $results = @(foreach ($blueprint in @(Get-NSPCookieCutterFilterBlueprints)) {
+    $blueprints = @(Get-NSPCookieCutterFilterBlueprints)
+    if ($Include) { $blueprints = @($blueprints | Where-Object { $_.DisplayName -in $Include }) }
+
+    $results = @(foreach ($blueprint in $blueprints) {
         if ($blueprint.DisplayName -in $existingDisplayNames) {
             [pscustomobject]@{
                 Status      = 'AlreadyExists'

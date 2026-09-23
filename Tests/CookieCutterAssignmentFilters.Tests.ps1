@@ -45,6 +45,17 @@ Describe 'New-NSPCookieCutterAssignmentFilters' {
         }
     }
 
+    It 'restricts consideration to -Include when passed, ignoring the rest of the catalog' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-NSPGraphCollection { @() } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest { [pscustomobject]@{ id = 'filter-new' } } -ModuleName NSP.IntuneApps
+
+        $result = New-NSPCookieCutterAssignmentFilters -TenantId 'tenant-1' -ClientId 'client-1' -Include @('Windows - Corporate Devices', 'Windows - Personal Devices') -Execute -Confirm:$false
+
+        $result.Created | Should -Be 2
+        ($result.Results.DisplayName | Sort-Object) | Should -Be @('Windows - Corporate Devices', 'Windows - Personal Devices')
+    }
+
     It 'creates nothing under -WhatIf' {
         Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
         Mock Invoke-NSPGraphCollection { @() } -ModuleName NSP.IntuneApps
