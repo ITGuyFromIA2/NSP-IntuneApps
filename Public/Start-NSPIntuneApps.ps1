@@ -414,7 +414,10 @@ function Start-NSPIntuneApps {
 
                     $filterDisplayName = $null
                     $filterMode = $null
-                    $knownFilters = if ($mode -eq 'Include') { @(Get-NSPIntuneAssignmentFilterList -TenantId $registration.TenantId -ClientId $registration.ClientId) } else { @() }
+                    # Every app in this tool's inventory is a Win32 LOB app (Get-NSPIntuneAppInventory
+                    # filters to isof('microsoft.graph.win32LobApp')), which is Windows-only - so
+                    # 'windows10AndLater' is the only platform a filter here could ever match.
+                    $knownFilters = if ($mode -eq 'Include') { @(Get-NSPIntuneAssignmentFilterList -TenantId $registration.TenantId -ClientId $registration.ClientId -Platform 'windows10AndLater') } else { @() }
                     if ($mode -eq 'Include' -and @($knownFilters).Count -gt 0) {
                         Write-Host 'Scope by an existing assignment filter? (Build one with [15], or deploy the standard set with [18], if you need a new one.)' -ForegroundColor Cyan
                         for ($index = 0; $index -lt $knownFilters.Count; $index++) { Write-Host ("  [{0}] {1} ({2})" -f ($index + 1), $knownFilters[$index].DisplayName, $knownFilters[$index].Platform) }

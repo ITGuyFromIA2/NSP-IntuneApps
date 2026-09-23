@@ -22,6 +22,21 @@ Describe 'Get-NSPIntuneAssignmentFilterList' {
         }
     }
 
+    It 'restricts results to -Platform when passed, excluding filters for other platforms' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-NSPGraphCollection {
+            @(
+                [pscustomobject]@{ id = 'filter-1'; displayName = 'Windows - Corporate Devices'; platform = 'windows10AndLater'; rule = '(device.deviceOwnership -eq "Corporate")' }
+                [pscustomobject]@{ id = 'filter-2'; displayName = 'Android - Corporate Devices'; platform = 'androidForWork'; rule = '(device.deviceOwnership -eq "Corporate")' }
+            )
+        } -ModuleName NSP.IntuneApps
+
+        $result = Get-NSPIntuneAssignmentFilterList -TenantId 'tenant-1' -ClientId 'client-1' -Platform 'windows10AndLater'
+
+        $result.Count | Should -Be 1
+        $result[0].DisplayName | Should -Be 'Windows - Corporate Devices'
+    }
+
     It 'returns an empty array when the tenant has no filters' {
         Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
         Mock Invoke-NSPGraphCollection { @() } -ModuleName NSP.IntuneApps
