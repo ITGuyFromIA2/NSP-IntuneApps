@@ -70,6 +70,44 @@ Describe 'Update-NSPIntuneWin32AppMetadata' {
         }
     }
 
+    It 'PATCHes optional Company Portal metadata only when the settings file sets it' -Skip:(-not $script:intuneWin32AppAvailable) {
+        $root = Join-Path $TestDrive 'OptionalMetadata'
+        New-FixtureCatalogApp -Root $root
+        Add-Content -LiteralPath (Join-Path $root 'Apps\Fixture\Fixture_SplitScriptSettings.ps1') -Value @'
+$VariableConfig.Developer = 'Network Systems Plus, Inc.'
+$VariableConfig.Owner = 'NSP Managed Services'
+$VariableConfig.InformationURL = 'https://example.invalid/info'
+$VariableConfig.PrivacyURL = 'https://example.invalid/privacy'
+$VariableConfig.AppVersion = '2.1.0'
+$VariableConfig.AllowAvailableUninstall = $true
+'@
+
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock Set-IntuneWin32App { } -ModuleName NSP.IntuneApps
+
+        Update-NSPIntuneWin32AppMetadata -RepoRoot $root -AppName 'Fixture' -IntuneObjectId 'intune-app-1' -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false | Out-Null
+
+        Should -Invoke Set-IntuneWin32App -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $Developer -eq 'Network Systems Plus, Inc.' -and $Owner -eq 'NSP Managed Services' -and
+            $InformationURL -eq 'https://example.invalid/info' -and $PrivacyURL -eq 'https://example.invalid/privacy' -and
+            $AppVersion -eq '2.1.0' -and $AllowAvailableUninstall -eq $true -and -not $PSBoundParameters.ContainsKey('Notes')
+        }
+    }
+
+    It 'omits the optional Company Portal fields when the settings file does not set them, preserving today''s behavior' -Skip:(-not $script:intuneWin32AppAvailable) {
+        $root = Join-Path $TestDrive 'NoOptionalMetadata'
+        New-FixtureCatalogApp -Root $root
+
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock Set-IntuneWin32App { } -ModuleName NSP.IntuneApps
+
+        Update-NSPIntuneWin32AppMetadata -RepoRoot $root -AppName 'Fixture' -IntuneObjectId 'intune-app-1' -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false | Out-Null
+
+        Should -Invoke Set-IntuneWin32App -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            -not $PSBoundParameters.ContainsKey('Developer') -and -not $PSBoundParameters.ContainsKey('AppVersion')
+        }
+    }
+
     It 'PATCHes nothing under -WhatIf' -Skip:(-not $script:intuneWin32AppAvailable) {
         $root = Join-Path $TestDrive 'WhatIf'
         New-FixtureCatalogApp -Root $root

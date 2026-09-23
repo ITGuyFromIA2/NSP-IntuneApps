@@ -35,6 +35,132 @@ $VariableConfig.RunAs32Bit_Detection = $false
             Set-Content -LiteralPath (Join-Path $appRoot 'Fixture_SplitScriptSettings.ps1') -Value $settings
         }
 
+        function New-FixtureDependencyRepo {
+            param([string]$Root)
+            $appRoot = Join-Path $Root 'Apps\Fixture'
+            New-Item -ItemType Directory -Path (Join-Path $appRoot 'Source') -Force | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $appRoot 'Detect') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $appRoot 'Source\DownloadInstall_Fixture.ps1') -Value '# setup'
+            Set-Content -LiteralPath (Join-Path $appRoot 'Source\Uninstall_Fixture.ps1') -Value '# uninstall'
+            Set-Content -LiteralPath (Join-Path $appRoot 'Detect\Detect_Fixture.ps1') -Value '# detect'
+            $settings = @'
+$VariableConfig = @{}
+$VariableConfig.DisplayName = 'Fixture App'
+$VariableConfig.Description = 'Fixture description.'
+$VariableConfig.Publisher = 'Fixture Publisher'
+$VariableConfig.IsFeatured = $false
+$VariableConfig.Category = @('Computer Management')
+$VariableConfig.SetupType = 'PoSH'
+$VariableConfig.InstallExperience = 'system'
+$VariableConfig.RestartExperience = 'basedOnReturnCode'
+$VariableConfig.REQ_Architecture = 'All'
+$VariableConfig.REQ_MinWindowsRelase = 'W10_1607'
+$VariableConfig.DetectionStyle = 'Script'
+$VariableConfig.DetectScript_Filter = 'Detect_*.ps1'
+$VariableConfig.SetupFile_Filter = 'DownloadInstall_*.ps1'
+$VariableConfig.PoSH = @{ Sign_SourceFilter = '*.ps1'; UninstallFile_Filter = 'Uninstall_*.ps1' }
+$VariableConfig.EnforceSignature_Detection = $true
+$VariableConfig.RunAs32Bit_Detection = $false
+$VariableConfig.AppDependency = @{ AppName = 'FortiClient'; DependencyType = 'AutoInstall' }
+'@
+            Set-Content -LiteralPath (Join-Path $appRoot 'Fixture_SplitScriptSettings.ps1') -Value $settings
+        }
+
+        function New-FixtureMsiRepo {
+            param([string]$Root)
+            $appRoot = Join-Path $Root 'Apps\Fixture'
+            New-Item -ItemType Directory -Path (Join-Path $appRoot 'Source') -Force | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $appRoot 'Detect') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $appRoot 'Source\Fixture.msi') -Value 'fake-msi'
+            $settings = @'
+$VariableConfig = @{}
+$VariableConfig.DisplayName = 'Fixture App'
+$VariableConfig.Description = 'Fixture description.'
+$VariableConfig.Publisher = 'Fixture Publisher'
+$VariableConfig.IsFeatured = $false
+$VariableConfig.Category = @('Computer Management')
+$VariableConfig.SetupType = 'MSI'
+$VariableConfig.InstallExperience = 'system'
+$VariableConfig.RestartExperience = 'basedOnReturnCode'
+$VariableConfig.REQ_Architecture = 'All'
+$VariableConfig.REQ_MinWindowsRelase = 'W10_1607'
+$VariableConfig.DetectionStyle = 'MSI'
+$VariableConfig.SetupFile_Filter = '*.msi'
+$VariableConfig.EnforceSignature_Detection = $true
+$VariableConfig.RunAs32Bit_Detection = $false
+'@
+            Set-Content -LiteralPath (Join-Path $appRoot 'Fixture_SplitScriptSettings.ps1') -Value $settings
+        }
+
+        function New-FixtureRequirementRepo {
+            param([string]$Root)
+            $appRoot = Join-Path $Root 'Apps\Fixture'
+            New-Item -ItemType Directory -Path (Join-Path $appRoot 'Source') -Force | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $appRoot 'Detect') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $appRoot 'Source\DownloadInstall_Fixture.ps1') -Value '# setup'
+            Set-Content -LiteralPath (Join-Path $appRoot 'Source\Uninstall_Fixture.ps1') -Value '# uninstall'
+            Set-Content -LiteralPath (Join-Path $appRoot 'Source\RequireProEdition.ps1') -Value '# requirement check'
+            Set-Content -LiteralPath (Join-Path $appRoot 'Detect\Detect_Fixture.ps1') -Value '# detect'
+            $settings = @'
+$VariableConfig = @{}
+$VariableConfig.DisplayName = 'Fixture App'
+$VariableConfig.Description = 'Fixture description.'
+$VariableConfig.Publisher = 'Fixture Publisher'
+$VariableConfig.IsFeatured = $false
+$VariableConfig.Category = @('Computer Management')
+$VariableConfig.SetupType = 'PoSH'
+$VariableConfig.InstallExperience = 'system'
+$VariableConfig.RestartExperience = 'basedOnReturnCode'
+$VariableConfig.REQ_Architecture = 'All'
+$VariableConfig.REQ_MinWindowsRelase = 'W10_1607'
+$VariableConfig.REQ_MinFreeDiskSpaceMB = 1024
+$VariableConfig.DetectionStyle = 'Script'
+$VariableConfig.DetectScript_Filter = 'Detect_*.ps1'
+$VariableConfig.SetupFile_Filter = 'DownloadInstall_*.ps1'
+$VariableConfig.PoSH = @{ Sign_SourceFilter = '*.ps1'; UninstallFile_Filter = 'Uninstall_*.ps1' }
+$VariableConfig.EnforceSignature_Detection = $true
+$VariableConfig.RunAs32Bit_Detection = $false
+$VariableConfig.AdditionalRequirementScript = @{ ScriptFile_Filter = 'RequireProEdition.ps1'; OutputDataType = 'Boolean'; ComparisonOperator = 'equal'; Value = 'True'; ScriptContext = 'system'; RunAs32BitOn64System = $false; EnforceSignatureCheck = $true }
+'@
+            Set-Content -LiteralPath (Join-Path $appRoot 'Fixture_SplitScriptSettings.ps1') -Value $settings
+        }
+
+        function New-FixtureMetadataRepo {
+            param([string]$Root)
+            $appRoot = Join-Path $Root 'Apps\Fixture'
+            New-Item -ItemType Directory -Path (Join-Path $appRoot 'Source') -Force | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $appRoot 'Detect') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $appRoot 'Source\DownloadInstall_Fixture.ps1') -Value '# setup'
+            Set-Content -LiteralPath (Join-Path $appRoot 'Source\Uninstall_Fixture.ps1') -Value '# uninstall'
+            Set-Content -LiteralPath (Join-Path $appRoot 'Detect\Detect_Fixture.ps1') -Value '# detect'
+            $settings = @'
+$VariableConfig = @{}
+$VariableConfig.DisplayName = 'Fixture App'
+$VariableConfig.Description = 'Fixture description.'
+$VariableConfig.Publisher = 'Fixture Publisher'
+$VariableConfig.IsFeatured = $false
+$VariableConfig.Category = @('Computer Management')
+$VariableConfig.SetupType = 'PoSH'
+$VariableConfig.InstallExperience = 'system'
+$VariableConfig.RestartExperience = 'basedOnReturnCode'
+$VariableConfig.REQ_Architecture = 'All'
+$VariableConfig.REQ_MinWindowsRelase = 'W10_1607'
+$VariableConfig.DetectionStyle = 'Script'
+$VariableConfig.DetectScript_Filter = 'Detect_*.ps1'
+$VariableConfig.SetupFile_Filter = 'DownloadInstall_*.ps1'
+$VariableConfig.PoSH = @{ Sign_SourceFilter = '*.ps1'; UninstallFile_Filter = 'Uninstall_*.ps1' }
+$VariableConfig.EnforceSignature_Detection = $true
+$VariableConfig.RunAs32Bit_Detection = $false
+$VariableConfig.Developer = 'Network Systems Plus, Inc.'
+$VariableConfig.Owner = 'NSP Managed Services'
+$VariableConfig.InformationURL = 'https://example.invalid/info'
+$VariableConfig.PrivacyURL = 'https://example.invalid/privacy'
+$VariableConfig.AppVersion = '2.1.0'
+$VariableConfig.ScopeTagName = 'Managed Services'
+'@
+            Set-Content -LiteralPath (Join-Path $appRoot 'Fixture_SplitScriptSettings.ps1') -Value $settings
+        }
+
         function New-FixtureRegistryDetectionRepo {
             param([string]$Root)
             $appRoot = Join-Path $Root 'Apps\Fixture'
@@ -165,6 +291,125 @@ $VariableConfig.RunAs32Bit_Detection = $false
         }
         Should -Invoke Add-IntuneWin32App -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
             $InstallCommandLine -match '^%windir%\\Sysnative\\WindowsPowerShell\\v1\.0\\powershell\.exe '
+        }
+    }
+
+    It 'resolves and attaches AppDependency by DisplayName after creation' -Skip:(-not $script:intuneWin32AppAvailable) {
+        $repoRoot = Join-Path $TestDrive 'Dependency'
+        New-FixtureDependencyRepo -Root $repoRoot
+        $packagePath = Join-Path $repoRoot 'Fixture.intunewin'
+        New-Item -ItemType File -Path $packagePath -Force | Out-Null
+
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppDetectionRuleScript { [ordered]@{ '@odata.type' = 'fake.detectionRule' } } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppRequirementRule { [ordered]@{ '@odata.type' = 'fake.requirementRule' } } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32App { [pscustomobject]@{ id = 'intune-app-1' } } -ModuleName NSP.IntuneApps
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest { [pscustomobject]@{} } -ModuleName NSP.IntuneApps
+        Mock Invoke-NSPGraphCollection { @([pscustomobject]@{ id = 'dependency-app-1'; displayName = 'FortiClient' }) } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppDependency { [ordered]@{ ID = $ID; DependencyType = $DependencyType } } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32AppDependency { } -ModuleName NSP.IntuneApps
+
+        $result = New-NSPIntuneWin32App -RepoRoot $repoRoot -AppName 'Fixture' -PackagePath $packagePath -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false
+
+        $result.DependsOn | Should -Be 'FortiClient'
+        Should -Invoke New-IntuneWin32AppDependency -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $ID -eq 'dependency-app-1' -and $DependencyType -eq 'AutoInstall'
+        }
+        Should -Invoke Add-IntuneWin32AppDependency -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $ID -eq 'intune-app-1'
+        }
+    }
+
+    It 'throws clearly when the AppDependency target cannot be resolved' -Skip:(-not $script:intuneWin32AppAvailable) {
+        $repoRoot = Join-Path $TestDrive 'DependencyMissing'
+        New-FixtureDependencyRepo -Root $repoRoot
+        $packagePath = Join-Path $repoRoot 'Fixture.intunewin'
+        New-Item -ItemType File -Path $packagePath -Force | Out-Null
+
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppDetectionRuleScript { [ordered]@{ '@odata.type' = 'fake.detectionRule' } } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppRequirementRule { [ordered]@{ '@odata.type' = 'fake.requirementRule' } } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32App { [pscustomobject]@{ id = 'intune-app-1' } } -ModuleName NSP.IntuneApps
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest { [pscustomobject]@{} } -ModuleName NSP.IntuneApps
+        Mock Invoke-NSPGraphCollection { @() } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32AppDependency { throw 'should not be called' } -ModuleName NSP.IntuneApps
+
+        { New-NSPIntuneWin32App -RepoRoot $repoRoot -AppName 'Fixture' -PackagePath $packagePath -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false } |
+            Should -Throw '*No Win32 app named*FortiClient*'
+    }
+
+    It 'builds a native MSI detection rule by reading ProductCode from the msi, for DetectionStyle MSI' -Skip:(-not $script:intuneWin32AppAvailable) {
+        $repoRoot = Join-Path $TestDrive 'MsiDetection'
+        New-FixtureMsiRepo -Root $repoRoot
+        $packagePath = Join-Path $repoRoot 'Fixture.intunewin'
+        New-Item -ItemType File -Path $packagePath -Force | Out-Null
+
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppDetectionRuleScript { throw 'should not be called for DetectionStyle MSI' } -ModuleName NSP.IntuneApps
+        Mock Get-MSIMetaData { '{FAKE-PRODUCT-CODE}' } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppDetectionRuleMSI { [ordered]@{ '@odata.type' = 'fake.msiDetectionRule'; ProductCode = $ProductCode } } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppRequirementRule { [ordered]@{ '@odata.type' = 'fake.requirementRule' } } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32App { [pscustomobject]@{ id = 'intune-app-1' } } -ModuleName NSP.IntuneApps
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest { [pscustomobject]@{} } -ModuleName NSP.IntuneApps
+
+        $result = New-NSPIntuneWin32App -RepoRoot $repoRoot -AppName 'Fixture' -PackagePath $packagePath -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false
+
+        $result.Status | Should -Be 'Created'
+        Should -Invoke Get-MSIMetaData -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter { $Property -eq 'ProductCode' }
+        Should -Invoke New-IntuneWin32AppDetectionRuleMSI -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter { $ProductCode -eq '{FAKE-PRODUCT-CODE}' }
+        Should -Invoke Add-IntuneWin32App -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $InstallCommandLine -eq 'msiexec.exe /i "Fixture.msi" /quiet /norestart' -and $UninstallCommandLine -eq 'msiexec.exe /x "Fixture.msi" /quiet /norestart'
+        }
+    }
+
+    It 'builds the requirement rule with the optional numeric fields, and an additional script requirement' -Skip:(-not $script:intuneWin32AppAvailable) {
+        $repoRoot = Join-Path $TestDrive 'Requirements'
+        New-FixtureRequirementRepo -Root $repoRoot
+        $packagePath = Join-Path $repoRoot 'Fixture.intunewin'
+        New-Item -ItemType File -Path $packagePath -Force | Out-Null
+
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppDetectionRuleScript { [ordered]@{ '@odata.type' = 'fake.detectionRule' } } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppRequirementRule { [ordered]@{ '@odata.type' = 'fake.requirementRule' } } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppRequirementRuleScript { [ordered]@{ '@odata.type' = 'fake.additionalRequirementRule' } } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32App { [pscustomobject]@{ id = 'intune-app-1' } } -ModuleName NSP.IntuneApps
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest { [pscustomobject]@{} } -ModuleName NSP.IntuneApps
+
+        $result = New-NSPIntuneWin32App -RepoRoot $repoRoot -AppName 'Fixture' -PackagePath $packagePath -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false
+
+        $result.Status | Should -Be 'Created'
+        Should -Invoke New-IntuneWin32AppRequirementRule -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter { $MinimumFreeDiskSpaceInMB -eq 1024 }
+        Should -Invoke New-IntuneWin32AppRequirementRuleScript -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $BooleanOutputDataType -eq $true -and $BooleanComparisonOperator -eq 'equal' -and $BooleanValue -eq 'True' -and $ScriptContext -eq 'system'
+        }
+        Should -Invoke Add-IntuneWin32App -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $AdditionalRequirementRule.Count -eq 1
+        }
+    }
+
+    It 'passes optional Company Portal metadata and ScopeTagName through to Add-IntuneWin32App' -Skip:(-not $script:intuneWin32AppAvailable) {
+        $repoRoot = Join-Path $TestDrive 'Metadata'
+        New-FixtureMetadataRepo -Root $repoRoot
+        $packagePath = Join-Path $repoRoot 'Fixture.intunewin'
+        New-Item -ItemType File -Path $packagePath -Force | Out-Null
+
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppDetectionRuleScript { [ordered]@{ '@odata.type' = 'fake.detectionRule' } } -ModuleName NSP.IntuneApps
+        Mock New-IntuneWin32AppRequirementRule { [ordered]@{ '@odata.type' = 'fake.requirementRule' } } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32App { [pscustomobject]@{ id = 'intune-app-1' } } -ModuleName NSP.IntuneApps
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Invoke-MgGraphRequest { [pscustomobject]@{} } -ModuleName NSP.IntuneApps
+
+        New-NSPIntuneWin32App -RepoRoot $repoRoot -AppName 'Fixture' -PackagePath $packagePath -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false | Out-Null
+
+        Should -Invoke Add-IntuneWin32App -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $Developer -eq 'Network Systems Plus, Inc.' -and $Owner -eq 'NSP Managed Services' -and
+            $InformationURL -eq 'https://example.invalid/info' -and $PrivacyURL -eq 'https://example.invalid/privacy' -and
+            $AppVersion -eq '2.1.0' -and $ScopeTagName -contains 'Managed Services' -and -not $PSBoundParameters.ContainsKey('Notes')
         }
     }
 

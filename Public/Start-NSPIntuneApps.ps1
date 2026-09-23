@@ -47,6 +47,7 @@ function Start-NSPIntuneApps {
         Write-Host '--- Deployment execution ---' -ForegroundColor DarkCyan
         Write-Host '  [9] View resumable deployment run journals'
         Write-Host '  [10] Advance the next stage of a saved run'
+        Write-Host '  [19] View install status for a deployed app'
         Write-Host '--- Tenant administration ---' -ForegroundColor DarkCyan
         Write-Host '  [11] Register/verify the tenant app registration (one-time bootstrap)'
         Write-Host '  [12] Delete an existing Intune app (irreversible)' -ForegroundColor Red
@@ -56,9 +57,10 @@ function Start-NSPIntuneApps {
         Write-Host '  [16] Manage master assignment groups (tenant defaults + per-app overrides)'
         Write-Host '  [17] Review and retire superseded apps (separate, explicitly approved)' -ForegroundColor Red
         Write-Host '  [18] Deploy the standard cookie-cutter assignment filter set'
+        Write-Host '  [20] Update build-time properties for a deployed app (install experience / restart behavior / scope tag)'
         Write-Host ''
         Write-Host '  [Q] Quit'
-        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','Q')
+        $choice = Read-NSPMenuChoice -Prompt 'Choose an action' -Allowed @('0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','Q')
 
         if ($choice -ne 'Q') {
             $actionTitles = @{
@@ -72,6 +74,8 @@ function Start-NSPIntuneApps {
                 '14' = 'Assign an app to a group'; '15' = 'Build and create an assignment filter'
                 '16' = 'Manage master assignment groups'; '17' = 'Review and retire superseded apps'
                 '18' = 'Deploy the standard cookie-cutter assignment filter set'
+                '19' = 'View install status for a deployed app'
+                '20' = 'Update build-time properties for a deployed app'
             }
             Write-NSPDashboardHeader -Title $actionTitles[$choice] -StatusLines @($graphStatus)
         }
@@ -667,6 +671,76 @@ function Start-NSPIntuneApps {
                         } else {
                             $result = New-NSPCookieCutterAssignmentFilters -TenantId $registration.TenantId -ClientId $registration.ClientId -Include $selectedNames -Execute -Confirm:$false
                             $result.Results | Format-Table Status, DisplayName, Id -AutoSize
+                        }
+                    }
+                }
+            }
+            '19' {
+                $inventoryRoot = Join-Path $RepoRoot '.nsp-intuneapps\inventory'
+                $latestInventory = if (Test-Path -LiteralPath $inventoryRoot) { Get-ChildItem -LiteralPath $inventoryRoot -Filter '*.json' -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 } else { $null }
+                $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+                if (-not $latestInventory) {
+                    Write-Warning 'No saved Intune app inventory was found. Use [7] to save one first, so an app can be picked by name instead of a raw object ID.'
+                } elseif (-not (Test-Path -LiteralPath $registrationPath)) {
+                    Write-Warning 'No tenant app registration is recorded. Use [11] first.'
+                } else {
+                    $inventoryDocument = Get-Content -LiteralPath $latestInventory.FullName -Raw | ConvertFrom-Json
+                    $apps = @($inventoryDocument.Apps)
+                    if ($apps.Count -eq 0) {
+                        Write-Warning "The most recent saved inventory ($($latestInventory.Name)) has no apps."
+                    } else {
+                        Write-Host "From inventory: $($latestInventory.Name) (tenant $($inventoryDocument.TenantId))" -ForegroundColor Cyan
+                        for ($index = 0; $index -lt $apps.Count; $index++) { Write-Host ("  [{0}] {1} | {2}" -f ($index + 1), $apps[$index].DisplayName, $apps[$index].Id) }
+                        $appChoice = Read-NSPMenuChoice -Prompt 'App to check' -Allowed @(1..$apps.Count | ForEach-Object { [string]$_ })
+                        $targetApp = $apps[[int]$appChoice - 1]
+                        $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+                        $status = Get-NSPIntuneAppInstallStatus -IntuneObjectId $targetApp.Id -AppDisplayName $targetApp.DisplayName -TenantId $inventoryDocument.TenantId -ClientId $registration.ClientId
+                        Write-NSPDenseFieldSummary -InputObject ($status | Select-Object AppDisplayName, TenantId, DeviceCount, UserCount)
+                        if ($status.DeviceStatusSummary.Count -gt 0) {
+                            Write-Host 'Device install status:' -ForegroundColor Cyan
+                            $status.DeviceStatusSummary | Format-Table InstallState, Count -AutoSize
+                        } else {
+                            Write-Host 'No device install status has been reported for this app yet.' -ForegroundColor DarkGray
+                        }
+                        Write-Host 'This was read-only.' -ForegroundColor DarkGray
+                    }
+                }
+            }
+            '20' {
+                $inventoryRoot = Join-Path $RepoRoot '.nsp-intuneapps\inventory'
+                $latestInventory = if (Test-Path -LiteralPath $inventoryRoot) { Get-ChildItem -LiteralPath $inventoryRoot -Filter '*.json' -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 } else { $null }
+                $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+                if (-not $latestInventory) {
+                    Write-Warning 'No saved Intune app inventory was found. Use [7] to save one first, so an app can be picked by name instead of a raw object ID.'
+                } elseif (-not (Test-Path -LiteralPath $registrationPath)) {
+                    Write-Warning 'No tenant app registration is recorded. Use [11] first.'
+                } else {
+                    $inventoryDocument = Get-Content -LiteralPath $latestInventory.FullName -Raw | ConvertFrom-Json
+                    $apps = @($inventoryDocument.Apps)
+                    if ($apps.Count -eq 0) {
+                        Write-Warning "The most recent saved inventory ($($latestInventory.Name)) has no apps."
+                    } else {
+                        Write-Host "From inventory: $($latestInventory.Name) (tenant $($inventoryDocument.TenantId))" -ForegroundColor Cyan
+                        for ($index = 0; $index -lt $apps.Count; $index++) { Write-Host ("  [{0}] {1} | {2}" -f ($index + 1), $apps[$index].DisplayName, $apps[$index].Id) }
+                        $appChoice = Read-NSPMenuChoice -Prompt 'App to update' -Allowed @(1..$apps.Count | ForEach-Object { [string]$_ })
+                        $targetApp = $apps[[int]$appChoice - 1]
+                        $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+                        $matchingCatalogEntries = @($catalog | Where-Object DisplayName -eq $targetApp.DisplayName)
+                        if ($matchingCatalogEntries.Count -ne 1) {
+                            Write-Warning "Could not find exactly one catalog entry with DisplayName '$($targetApp.DisplayName)' to read settings from. Found $($matchingCatalogEntries.Count)."
+                        } else {
+                            $catalogAppName = $matchingCatalogEntries[0].Name
+                            $preview = Update-NSPIntuneWin32AppBuildProperties -RepoRoot $RepoRoot -AppName $catalogAppName -IntuneObjectId $targetApp.Id -TenantId $inventoryDocument.TenantId -ClientId $registration.ClientId
+                            $preview | Format-List
+                            if ($preview.Status -eq 'PlanOnly') {
+                                $executeChoice = Read-NSPMenuChoice -Prompt 'Apply this PATCH now? [Y/N]' -Allowed @('Y', 'N') -Default 'N'
+                                if ($executeChoice -eq 'Y') {
+                                    $result = Update-NSPIntuneWin32AppBuildProperties -RepoRoot $RepoRoot -AppName $catalogAppName -IntuneObjectId $targetApp.Id -TenantId $inventoryDocument.TenantId -ClientId $registration.ClientId -Execute -Confirm:$false
+                                    $result | Format-List
+                                } else {
+                                    Write-Host 'No changes were made.' -ForegroundColor Yellow
+                                }
+                            }
                         }
                     }
                 }

@@ -22,6 +22,22 @@ function Resolve-NSPAppBuildPlan {
         DetectionStyle 'Registry_Exist' builds a KeyPath/ValueName pair for
         New-IntuneWin32AppDetectionRuleRegistry instead of a detection script - FortiClient_
         ImportConfig is Registry_Exist today (with a placeholder KeyPath pending real values).
+
+        SetupType 'MSI' expects SetupFile_Filter to match the .msi itself in Source/ (no separate
+        uninstall script - msiexec uninstalls by pointing back at the same file, which reads its
+        own ProductCode, so no MSI metadata extraction happens in this pure/offline function).
+        DetectionStyle 'MSI' only sets RequiresMsiProductCode - the caller (which already has the
+        IntuneWin32App module loaded) is responsible for extracting the real ProductCode via
+        Get-MSIMetaData right before building the native MSI detection rule; this function stays a
+        module-free, purely offline resolver, matching every other DetectionStyle here.
+
+        $VariableConfig.AdditionalRequirementScript (optional) names one extra script-based
+        requirement rule beyond the mandatory Architecture/MinimumSupportedWindowsRelease pair -
+        e.g. an OS edition or other check New-IntuneWin32AppRequirementRule's own built-in disk
+        space/memory/processor params can't express. Its ScriptFile_Filter is resolved from
+        Source/ the same way every other file field here is (glob, require exactly one) into
+        AdditionalRequirementScriptPath; every other field on it passes through unresolved for the
+        caller to build the actual rule object with (it needs the IntuneWin32App module loaded).
     #>
     [CmdletBinding()]
     param(
@@ -32,12 +48,12 @@ function Resolve-NSPAppBuildPlan {
     )
 
     $setupType = [string]$VariableConfig.SetupType
-    if ($setupType -notin @('PoSH', 'PoSH_sysnative')) {
-        throw "App '$Name' uses SetupType '$setupType', which this build resolver does not yet support. Supported: PoSH, PoSH_sysnative."
+    if ($setupType -notin @('PoSH', 'PoSH_sysnative', 'MSI')) {
+        throw "App '$Name' uses SetupType '$setupType', which this build resolver does not yet support. Supported: PoSH, PoSH_sysnative, MSI."
     }
     $detectionStyle = [string]$VariableConfig.DetectionStyle
-    if ($detectionStyle -notin @('Script', 'Registry_Exist')) {
-        throw "App '$Name' uses DetectionStyle '$detectionStyle', which this build resolver does not yet support. Supported: Script, Registry_Exist."
+    if ($detectionStyle -notin @('Script', 'Registry_Exist', 'MSI')) {
+        throw "App '$Name' uses DetectionStyle '$detectionStyle', which this build resolver does not yet support. Supported: Script, Registry_Exist, MSI."
     }
 
     $sourceFolder = Join-Path $Path 'Source'
@@ -49,11 +65,14 @@ function Resolve-NSPAppBuildPlan {
     if ($setupFile.Count -ne 1) { throw "App '$Name' expected exactly one setup file matching '$setupFilter' in $sourceFolder, found $($setupFile.Count)." }
     $setupFile = $setupFile[0]
 
-    $uninstallFilter = [string]$VariableConfig.PoSH.UninstallFile_Filter
-    if ([string]::IsNullOrWhiteSpace($uninstallFilter)) { throw "App '$Name' does not declare PoSH.UninstallFile_Filter." }
-    $uninstallFile = @(Get-ChildItem -LiteralPath $sourceFolder -Filter $uninstallFilter -File -ErrorAction SilentlyContinue)
-    if ($uninstallFile.Count -ne 1) { throw "App '$Name' expected exactly one uninstall file matching '$uninstallFilter' in $sourceFolder, found $($uninstallFile.Count)." }
-    $uninstallFile = $uninstallFile[0]
+    $uninstallFile = $null
+    if ($setupType -ne 'MSI') {
+        $uninstallFilter = [string]$VariableConfig.PoSH.UninstallFile_Filter
+        if ([string]::IsNullOrWhiteSpace($uninstallFilter)) { throw "App '$Name' does not declare PoSH.UninstallFile_Filter." }
+        $uninstallFile = @(Get-ChildItem -LiteralPath $sourceFolder -Filter $uninstallFilter -File -ErrorAction SilentlyContinue)
+        if ($uninstallFile.Count -ne 1) { throw "App '$Name' expected exactly one uninstall file matching '$uninstallFilter' in $sourceFolder, found $($uninstallFile.Count)." }
+        $uninstallFile = $uninstallFile[0]
+    }
 
     $detectFile = $null
     $registryKeyPath = $null
@@ -63,20 +82,36 @@ function Resolve-NSPAppBuildPlan {
         $detectFile = @(Get-ChildItem -LiteralPath $detectFolder -Filter $detectFilter -File -ErrorAction SilentlyContinue)
         if ($detectFile.Count -ne 1) { throw "App '$Name' expected exactly one detection script matching '$detectFilter' in $detectFolder, found $($detectFile.Count)." }
         $detectFile = $detectFile[0]
-    } else {
+    } elseif ($detectionStyle -eq 'Registry_Exist') {
         $registryKeyPath = [string]$VariableConfig.Detection_KeyPath
         $registryValueName = [string]$VariableConfig.Detection_ValueName
         if ([string]::IsNullOrWhiteSpace($registryKeyPath)) { throw "App '$Name' uses DetectionStyle 'Registry_Exist' but does not declare Detection_KeyPath." }
     }
 
-    # Intune runs install/uninstall commands from the package's extracted working directory on
-    # the client, not the build machine, so only the bare file name belongs in the command line.
-    $shellPath = if ($setupType -eq 'PoSH_sysnative') { '%windir%\Sysnative\WindowsPowerShell\v1.0\powershell.exe' } else { 'PowerShell.exe' }
-    $installCommandLine = '{0} -ExecutionPolicy Bypass -WindowStyle Hidden -File "{1}"' -f $shellPath, $setupFile.Name
-    $uninstallCommandLine = '{0} -ExecutionPolicy Bypass -WindowStyle Hidden -File "{1}"' -f $shellPath, $uninstallFile.Name
+    if ($setupType -eq 'MSI') {
+        # msiexec uninstalls by pointing back at the same .msi file (it reads the ProductCode from
+        # the file itself), so no separate uninstall file and no MSI metadata read belong here -
+        # see this function's own .DESCRIPTION for why that extraction stays with the caller.
+        $installCommandLine = 'msiexec.exe /i "{0}" /quiet /norestart' -f $setupFile.Name
+        $uninstallCommandLine = 'msiexec.exe /x "{0}" /quiet /norestart' -f $setupFile.Name
+    } else {
+        # Intune runs install/uninstall commands from the package's extracted working directory on
+        # the client, not the build machine, so only the bare file name belongs in the command line.
+        $shellPath = if ($setupType -eq 'PoSH_sysnative') { '%windir%\Sysnative\WindowsPowerShell\v1.0\powershell.exe' } else { 'PowerShell.exe' }
+        $installCommandLine = '{0} -ExecutionPolicy Bypass -WindowStyle Hidden -File "{1}"' -f $shellPath, $setupFile.Name
+        $uninstallCommandLine = '{0} -ExecutionPolicy Bypass -WindowStyle Hidden -File "{1}"' -f $shellPath, $uninstallFile.Name
+    }
     if ($VariableConfig.PoSH.Args) {
         $installCommandLine = '{0} {1}' -f $installCommandLine, $VariableConfig.PoSH.Args_String
         $uninstallCommandLine = '{0} {1}' -f $uninstallCommandLine, $VariableConfig.PoSH.Args_String
+    }
+
+    $additionalRequirementScriptPath = $null
+    if ($VariableConfig.AdditionalRequirementScript -and $VariableConfig.AdditionalRequirementScript.ScriptFile_Filter) {
+        $additionalScriptFilter = [string]$VariableConfig.AdditionalRequirementScript.ScriptFile_Filter
+        $additionalScriptFile = @(Get-ChildItem -LiteralPath $sourceFolder -Filter $additionalScriptFilter -File -ErrorAction SilentlyContinue)
+        if ($additionalScriptFile.Count -ne 1) { throw "App '$Name' expected exactly one additional requirement script matching '$additionalScriptFilter' in $sourceFolder, found $($additionalScriptFile.Count)." }
+        $additionalRequirementScriptPath = $additionalScriptFile[0].FullName
     }
 
     $iconPath = $null
@@ -103,6 +138,12 @@ function Resolve-NSPAppBuildPlan {
         RunAs32BitDetection              = [bool]$VariableConfig.RunAs32Bit_Detection
         RequirementArchitecture          = [string]$VariableConfig.REQ_Architecture
         RequirementMinimumWindowsRelease = [string]$VariableConfig.REQ_MinWindowsRelase
+        RequirementMinFreeDiskSpaceMB    = if ($VariableConfig.REQ_MinFreeDiskSpaceMB) { [int]$VariableConfig.REQ_MinFreeDiskSpaceMB } else { $null }
+        RequirementMinMemoryMB           = if ($VariableConfig.REQ_MinMemoryMB) { [int]$VariableConfig.REQ_MinMemoryMB } else { $null }
+        RequirementMinProcessors         = if ($VariableConfig.REQ_MinProcessors) { [int]$VariableConfig.REQ_MinProcessors } else { $null }
+        RequirementMinCPUSpeedMHz        = if ($VariableConfig.REQ_MinCPUSpeedMHz) { [int]$VariableConfig.REQ_MinCPUSpeedMHz } else { $null }
+        AdditionalRequirementScriptPath  = $additionalRequirementScriptPath
+        AdditionalRequirementScript      = $VariableConfig.AdditionalRequirementScript
         IconPath                         = $iconPath
     }
 }

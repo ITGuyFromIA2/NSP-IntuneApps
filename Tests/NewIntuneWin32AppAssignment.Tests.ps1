@@ -105,4 +105,29 @@ Describe 'New-NSPIntuneWin32AppAssignment' {
             $FilterName -eq 'Corporate Windows' -and $FilterMode -eq 'Include'
         }
     }
+
+    It 'passes notification/delivery/restart-grace knobs through to Add-IntuneWin32AppAssignmentGroup when set' -Skip:(-not $script:intuneWin32AppAvailable) {
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32AppAssignmentGroup { } -ModuleName NSP.IntuneApps
+
+        $result = New-NSPIntuneWin32AppAssignment -IntuneObjectId 'app-1' -GroupId 'group-1' -Mode Include -Intent required -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false `
+            -Notification showReboot -DeliveryOptimizationPriority foreground -UseLocalTime $true -EnableRestartGracePeriod $true -RestartGracePeriod 1440 -RestartCountDownDisplay 15 -RestartNotificationSnooze 240
+
+        $result.Status | Should -Be 'Assigned'
+        Should -Invoke Add-IntuneWin32AppAssignmentGroup -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $Notification -eq 'showReboot' -and $DeliveryOptimizationPriority -eq 'foreground' -and $UseLocalTime -eq $true -and
+            $EnableRestartGracePeriod -eq $true -and $RestartGracePeriod -eq 1440 -and $RestartCountDownDisplay -eq 15 -and $RestartNotificationSnooze -eq 240
+        }
+    }
+
+    It 'omits every optional knob when none are set, preserving today''s behavior' -Skip:(-not $script:intuneWin32AppAvailable) {
+        Mock Connect-MSIntuneGraph { } -ModuleName NSP.IntuneApps
+        Mock Add-IntuneWin32AppAssignmentGroup { } -ModuleName NSP.IntuneApps
+
+        New-NSPIntuneWin32AppAssignment -IntuneObjectId 'app-1' -GroupId 'group-1' -Mode Include -Intent required -TenantId 'tenant-1' -ClientId 'client-1' -Execute -Confirm:$false | Out-Null
+
+        Should -Invoke Add-IntuneWin32AppAssignmentGroup -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            -not $PSBoundParameters.ContainsKey('Notification') -and -not $PSBoundParameters.ContainsKey('DeliveryOptimizationPriority') -and -not $PSBoundParameters.ContainsKey('RestartGracePeriod')
+        }
+    }
 }

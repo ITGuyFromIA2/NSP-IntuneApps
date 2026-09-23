@@ -12,6 +12,13 @@ function New-NSPIntuneWin32AppAssignment {
         'availableWithoutEnrollment' intent (the underlying cmdlets reject it). Each call adds
         exactly one assignment; it never creates, deletes, or replaces any existing assignment.
         Intune does not support combining a filter with an Exclude assignment.
+
+        Notification/DeliveryOptimizationPriority/AvailableTime/DeadlineTime/UseLocalTime/
+        EnableRestartGracePeriod/RestartGracePeriod/RestartCountDownDisplay/RestartNotificationSnooze
+        are all optional and identical across every target type's underlying cmdlet (confirmed via
+        Get-Command). Each is only passed through when the caller actually sets it (checked via
+        $PSBoundParameters, not truthiness - $false/0 are legitimate explicit values), so omitting
+        all of them preserves today's behavior exactly.
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     param(
@@ -24,10 +31,25 @@ function New-NSPIntuneWin32AppAssignment {
         [ValidateSet('required', 'available', 'uninstall', 'availableWithoutEnrollment')][string]$Intent = 'required',
         [string]$FilterDisplayName,
         [ValidateSet('Include', 'Exclude')][string]$FilterMode,
+        [ValidateSet('showAll', 'showReboot', 'hideAll')][string]$Notification,
+        [ValidateSet('notConfigured', 'foreground')][string]$DeliveryOptimizationPriority,
+        [datetime]$AvailableTime,
+        [datetime]$DeadlineTime,
+        [bool]$UseLocalTime,
+        [bool]$EnableRestartGracePeriod,
+        [int]$RestartGracePeriod,
+        [int]$RestartCountDownDisplay,
+        [int]$RestartNotificationSnooze,
         [Parameter(Mandatory)][string]$TenantId,
         [Parameter(Mandatory)][string]$ClientId,
         [switch]$Execute
     )
+
+    $optionalAssignArgNames = @('Notification', 'DeliveryOptimizationPriority', 'AvailableTime', 'DeadlineTime', 'UseLocalTime', 'EnableRestartGracePeriod', 'RestartGracePeriod', 'RestartCountDownDisplay', 'RestartNotificationSnooze')
+    $optionalAssignArgs = @{}
+    foreach ($paramName in $optionalAssignArgNames) {
+        if ($PSBoundParameters.ContainsKey($paramName)) { $optionalAssignArgs[$paramName] = $PSBoundParameters[$paramName] }
+    }
 
     if ($TargetType -eq 'Group' -and -not $GroupId) {
         throw 'GroupId is required when TargetType is Group.'
@@ -78,17 +100,17 @@ function New-NSPIntuneWin32AppAssignment {
 
     switch ($TargetType) {
         'AllUsers' {
-            $assignArgs = @{ ID = $IntuneObjectId; Intent = $Intent }
+            $assignArgs = @{ ID = $IntuneObjectId; Intent = $Intent } + $optionalAssignArgs
             if ($FilterDisplayName) { $assignArgs.FilterName = $FilterDisplayName; $assignArgs.FilterMode = $FilterMode }
             Add-IntuneWin32AppAssignmentAllUsers @assignArgs -ErrorAction Stop | Out-Null
         }
         'AllDevices' {
-            $assignArgs = @{ ID = $IntuneObjectId; Intent = $Intent }
+            $assignArgs = @{ ID = $IntuneObjectId; Intent = $Intent } + $optionalAssignArgs
             if ($FilterDisplayName) { $assignArgs.FilterName = $FilterDisplayName; $assignArgs.FilterMode = $FilterMode }
             Add-IntuneWin32AppAssignmentAllDevices @assignArgs -ErrorAction Stop | Out-Null
         }
         default {
-            $assignArgs = @{ ID = $IntuneObjectId; GroupID = $GroupId; Intent = $Intent }
+            $assignArgs = @{ ID = $IntuneObjectId; GroupID = $GroupId; Intent = $Intent } + $optionalAssignArgs
             if ($Mode -eq 'Include') {
                 $assignArgs.Include = $true
                 if ($FilterDisplayName) {
