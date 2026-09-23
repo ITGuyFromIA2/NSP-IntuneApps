@@ -29,6 +29,7 @@ Export-ModuleMember -Function @(
     'New-NSPPrinterApp'
     'Start-NSPInstallerCapture'
     'Test-NSPInteractiveInstallerCapture'
+    'New-NSPInteractiveInstallerRunner'
     'New-NSPAppDeploymentPlan'
     'New-NSPAppDeploymentRun'
     'Set-NSPAppDeploymentDecisions'
