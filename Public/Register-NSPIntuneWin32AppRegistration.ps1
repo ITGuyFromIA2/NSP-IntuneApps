@@ -94,8 +94,18 @@ function Register-NSPIntuneWin32AppRegistration {
             # registered). Compare the existing admin-consent grant's scope string against the
             # current required list and top it up rather than requiring a full re-registration.
             $graphServicePrincipalForRepair = Get-MgServicePrincipal -Filter "appId eq '$graphAppId'" | Select-Object -First 1
+            # oauth2PermissionGrant.clientId is the app's *service principal* object ID, not the
+            # application object ID ($existingApp[0].Id, used here in an earlier version of this
+            # function). Using the wrong ID meant this lookup silently missed the real grant
+            # whenever permissions needed a top-up, and New-MgOauth2PermissionGrant below would
+            # have been rejected by Graph outright on the create-grant path (the create branch
+            # further down already uses $servicePrincipal.Id correctly, for comparison).
+            $appServicePrincipalForRepair = Get-MgServicePrincipal -Filter "appId eq '$($record.ClientId)'" | Select-Object -First 1
+            if (-not $appServicePrincipalForRepair) {
+                throw "The service principal for app registration '$($record.ClientId)' could not be resolved in tenant $($context.TenantId). The application object still exists, but its service principal may have been deleted; recreate it (New-MgServicePrincipal -AppId $($record.ClientId)) before permissions can be repaired."
+            }
             $existingGrant = if ($graphServicePrincipalForRepair) {
-                Get-MgOauth2PermissionGrant -Filter "clientId eq '$($existingApp[0].Id)' and resourceId eq '$($graphServicePrincipalForRepair.Id)' and consentType eq 'AllPrincipals'" -ErrorAction SilentlyContinue | Select-Object -First 1
+                Get-MgOauth2PermissionGrant -Filter "clientId eq '$($appServicePrincipalForRepair.Id)' and resourceId eq '$($graphServicePrincipalForRepair.Id)' and consentType eq 'AllPrincipals'" -ErrorAction SilentlyContinue | Select-Object -First 1
             } else { $null }
             $grantedScopeNames = if ($existingGrant) { @([string]$existingGrant.Scope -split '\s+' | Where-Object { $_ }) } else { @() }
             $missingPermissionNames = @($requiredPermissionNames | Where-Object { $_ -notin $grantedScopeNames })
@@ -118,7 +128,7 @@ function Register-NSPIntuneWin32AppRegistration {
                     Update-MgOauth2PermissionGrant -OAuth2PermissionGrantId $existingGrant.Id -BodyParameter @{ Scope = $mergedScope } -ErrorAction Stop | Out-Null
                 } else {
                     New-MgOauth2PermissionGrant -BodyParameter @{
-                        ClientId    = $existingApp[0].Id
+                        ClientId    = $appServicePrincipalForRepair.Id
                         ConsentType = 'AllPrincipals'
                         ResourceId  = $graphServicePrincipalForRepair.Id
                         Scope       = $mergedScope

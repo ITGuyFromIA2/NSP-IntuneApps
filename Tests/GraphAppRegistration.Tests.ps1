@@ -222,6 +222,77 @@ Describe 'Register-NSPIntuneWin32AppRegistration' {
         $result.TenantDomain | Should -BeNullOrEmpty
     }
 
+    It 'uses the app''s own service principal id, not the application object id, when repairing permissions' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Get-MgApplication {
+            [pscustomobject]@{ Id = 'existing-object-id'; AppId = 'existing-app-id'; PublicClient = [pscustomobject]@{ RedirectUris = @('http://localhost', 'ms-appx-web://Microsoft.AAD.BrokerPlugin/existing-app-id') } }
+        } -ModuleName NSP.IntuneApps
+        Mock Get-MgServicePrincipal { New-FixtureGraphServicePrincipal } -ModuleName NSP.IntuneApps -ParameterFilter { $Filter -eq "appId eq '00000003-0000-0000-c000-000000000000'" }
+        Mock Get-MgServicePrincipal { [pscustomobject]@{ Id = 'app-sp-id' } } -ModuleName NSP.IntuneApps -ParameterFilter { $Filter -eq "appId eq 'existing-app-id'" }
+        Mock Get-MgOauth2PermissionGrant {
+            [pscustomobject]@{ Id = 'grant-id'; Scope = 'DeviceManagementApps.ReadWrite.All DeviceManagementConfiguration.ReadWrite.All DeviceManagementRBAC.Read.All Group.Read.All' }
+        } -ModuleName NSP.IntuneApps
+        Mock Update-MgOauth2PermissionGrant { } -ModuleName NSP.IntuneApps
+
+        $repoRoot = Join-Path $TestDrive 'permission-repair-clientid'
+        $configDir = Join-Path $repoRoot 'Config\Local'
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+        [ordered]@{
+            TenantId = 'tenant-1'; ClientId = 'existing-app-id'; AppName = 'NSP-IntuneApps-Win32AppDeployment'
+            CreatedAtUtc = (Get-Date).ToString('o'); GrantedScopes = @('DeviceManagementApps.ReadWrite.All')
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $configDir 'GraphAppRegistration.json') -Encoding UTF8
+
+        Register-NSPIntuneWin32AppRegistration -RepoRoot $repoRoot -TenantId 'tenant-1' -Execute -Confirm:$false | Out-Null
+
+        Should -Invoke Get-MgOauth2PermissionGrant -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $Filter -like "*clientId eq 'app-sp-id'*"
+        }
+    }
+
+    It 'creates a new grant with the app''s own service principal id when no existing grant is found during repair' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Get-MgApplication {
+            [pscustomobject]@{ Id = 'existing-object-id'; AppId = 'existing-app-id'; PublicClient = [pscustomobject]@{ RedirectUris = @('http://localhost', 'ms-appx-web://Microsoft.AAD.BrokerPlugin/existing-app-id') } }
+        } -ModuleName NSP.IntuneApps
+        Mock Get-MgServicePrincipal { New-FixtureGraphServicePrincipal } -ModuleName NSP.IntuneApps -ParameterFilter { $Filter -eq "appId eq '00000003-0000-0000-c000-000000000000'" }
+        Mock Get-MgServicePrincipal { [pscustomobject]@{ Id = 'app-sp-id' } } -ModuleName NSP.IntuneApps -ParameterFilter { $Filter -eq "appId eq 'existing-app-id'" }
+        Mock Get-MgOauth2PermissionGrant { $null } -ModuleName NSP.IntuneApps
+        Mock New-MgOauth2PermissionGrant { [pscustomobject]@{ Id = 'new-grant-id' } } -ModuleName NSP.IntuneApps
+
+        $repoRoot = Join-Path $TestDrive 'permission-repair-no-existing-grant'
+        $configDir = Join-Path $repoRoot 'Config\Local'
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+        [ordered]@{
+            TenantId = 'tenant-1'; ClientId = 'existing-app-id'; AppName = 'NSP-IntuneApps-Win32AppDeployment'
+            CreatedAtUtc = (Get-Date).ToString('o'); GrantedScopes = @('DeviceManagementApps.ReadWrite.All')
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $configDir 'GraphAppRegistration.json') -Encoding UTF8
+
+        Register-NSPIntuneWin32AppRegistration -RepoRoot $repoRoot -TenantId 'tenant-1' -Execute -Confirm:$false | Out-Null
+
+        Should -Invoke New-MgOauth2PermissionGrant -Times 1 -ModuleName NSP.IntuneApps -ParameterFilter {
+            $BodyParameter.ClientId -eq 'app-sp-id' -and $BodyParameter.ResourceId -eq 'graph-sp-id'
+        }
+    }
+
+    It 'throws a clear error when the app''s service principal cannot be resolved during permission repair' {
+        Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
+        Mock Get-MgApplication {
+            [pscustomobject]@{ Id = 'existing-object-id'; AppId = 'existing-app-id'; PublicClient = [pscustomobject]@{ RedirectUris = @('http://localhost', 'ms-appx-web://Microsoft.AAD.BrokerPlugin/existing-app-id') } }
+        } -ModuleName NSP.IntuneApps
+        Mock Get-MgServicePrincipal { New-FixtureGraphServicePrincipal } -ModuleName NSP.IntuneApps -ParameterFilter { $Filter -eq "appId eq '00000003-0000-0000-c000-000000000000'" }
+        Mock Get-MgServicePrincipal { $null } -ModuleName NSP.IntuneApps -ParameterFilter { $Filter -eq "appId eq 'existing-app-id'" }
+
+        $repoRoot = Join-Path $TestDrive 'permission-repair-missing-sp'
+        $configDir = Join-Path $repoRoot 'Config\Local'
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+        [ordered]@{
+            TenantId = 'tenant-1'; ClientId = 'existing-app-id'; AppName = 'NSP-IntuneApps-Win32AppDeployment'
+            CreatedAtUtc = (Get-Date).ToString('o'); GrantedScopes = @('DeviceManagementApps.ReadWrite.All')
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $configDir 'GraphAppRegistration.json') -Encoding UTF8
+
+        { Register-NSPIntuneWin32AppRegistration -RepoRoot $repoRoot -TenantId 'tenant-1' } | Should -Throw '*service principal*could not be resolved*'
+    }
+
     It 'fails clearly when a required Graph permission cannot be resolved' {
         Mock Connect-NSPGraph { [pscustomobject]@{ TenantId = 'tenant-1'; Account = 'operator@example.com' } } -ModuleName NSP.IntuneApps
         Mock Get-MgServicePrincipal { [pscustomobject]@{ Id = 'graph-sp-id'; Oauth2PermissionScopes = @() } } -ModuleName NSP.IntuneApps
