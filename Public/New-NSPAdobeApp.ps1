@@ -43,7 +43,7 @@ function New-NSPAdobeApp {
         }
         if (-not $ResolveReaderWithEvergreen -and -not $PackagePath) {
             Write-Host 'Example: C:\Staging\AdobeAcrobat.zip, an installer EXE/MSI, or an extracted package directory'
-            $PackagePath = Read-Host '4. Reviewed package path'
+            $PackagePath = Read-NSPPathInput -Prompt '4. Reviewed package path'
         }
         if (-not $InstallerRelativePath) {
             Write-Host 'For a ZIP/directory, example: AdobeAcrobat\Setup.exe. Press Enter to auto-detect one Setup.exe.'

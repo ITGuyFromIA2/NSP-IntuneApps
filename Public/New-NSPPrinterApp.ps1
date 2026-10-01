@@ -40,10 +40,10 @@ function New-NSPPrinterApp {
             $sourceChoice = Read-NSPMenuChoice -Prompt '4. Driver source' -Allowed @('1','2') -Default '1'
             if ($sourceChoice -eq '2') {
                 Write-Host 'Example: Artifacts\PrinterDrivers\Canon-UFRII.release.json'
-                if (-not $ReleaseManifestPath) { $ReleaseManifestPath = Read-Host '5. Manifest path' }
+                if (-not $ReleaseManifestPath) { $ReleaseManifestPath = Read-NSPPathInput -Prompt '5. Manifest path' }
             } else {
                 Write-Host 'Example: C:\Temp\Canon-UFRII.zip'
-                if (-not $DriverArchivePath) { $DriverArchivePath = Read-Host '5. Driver ZIP path' }
+                if (-not $DriverArchivePath) { $DriverArchivePath = Read-NSPPathInput -Prompt '5. Driver ZIP path' }
             }
             Write-Host 'Example: Driver\x64\CNLB0MA64.INF'
             Write-Host 'For a release manifest, press Enter to use its InfRelativePath.'

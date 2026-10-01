@@ -50,7 +50,7 @@ function New-NSPFortiClientSuperScriptApp {
     if ($Interactive) {
         Write-Host 'FortiClient SuperScript packaging wizard' -ForegroundColor Cyan
         Write-Host 'Example: C:\GitRepo\NSP-FGTIPSecTools\IPSEC AIO\Staging\<Client>\<Client>_FortiClient_Upgrade.ps1'
-        if (-not $SuperScriptPath) { $SuperScriptPath = Read-Host '1. Path to the already-built SuperScript' }
+        if (-not $SuperScriptPath) { $SuperScriptPath = Read-NSPPathInput -Prompt '1. Path to the already-built SuperScript' }
         Write-Host 'Example: Contoso'
         if (-not $ClientAbbrev) { $ClientAbbrev = Read-Host '2. Client abbreviation' }
         Write-Host "Example: FortiClient - $ClientAbbrev (blank to use this default)"

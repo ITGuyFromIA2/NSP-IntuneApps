@@ -24,11 +24,11 @@ function New-NSPDriveMapApp {
         Write-Host 'Example drive letter: S (enter the letter only)'
         if (-not $DriveLetter) { $DriveLetter = Read-Host '2. Drive letter' }
         Write-Host 'Example path: \\files.contoso.com\Accounting'
-        if (-not $Path) { $Path = Read-Host '3. UNC path' }
+        if (-not $Path) { $Path = Read-NSPPathInput -Prompt '3. UNC path' }
         if (-not $OutputRoot) {
             $defaultHint = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { 'Config\Local\GeneratedApps (ignored by Git - this is the public upstream repo)' } else { 'Apps (this repo is not the public upstream, so it is deployable by default)' }
             Write-Host "Default output folder: $defaultHint"
-            $enteredRoot = Read-Host '4. Output folder [press Enter for the default]'
+            $enteredRoot = Read-NSPPathInput -Prompt '4. Output folder [press Enter for the default]'
             if ($enteredRoot) { $OutputRoot = $enteredRoot }
         }
     }

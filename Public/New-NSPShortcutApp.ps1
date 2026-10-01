@@ -32,7 +32,7 @@ function New-NSPShortcutApp {
         Write-Host 'Example name: Service Portal'
         if (-not $Name) { $Name = Read-Host '2. Friendly shortcut name' }
         Write-Host $(if ($Mode -like 'Web*') { 'Example target: https://portal.example.com' } else { 'Example target: %ProgramFiles%\Vendor\Application.exe' })
-        if (-not $Target) { $Target = Read-Host '3. Target' }
+        if (-not $Target) { $Target = Read-NSPPathInput -Prompt '3. Target' }
         if ($Mode -eq 'File' -and -not $Arguments) {
             Write-Host 'Example arguments: --mode managed (optional)'
             $Arguments = Read-Host '4. Arguments'

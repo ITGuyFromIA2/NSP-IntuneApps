@@ -30,7 +30,7 @@ function Invoke-NSPGuidedTemplateWizardMenu {
         'C' { New-NSPPrinterApp -RepoRoot $RepoRoot -Interactive }
         'D' {
             Write-Host 'Example: C:\Temp\VendorSetup.exe' -ForegroundColor DarkGray
-            $installerPath = Read-Host 'Installer path'
+            $installerPath = Read-NSPPathInput -Prompt 'Installer path'
             Start-NSPInstallerCapture -InstallerPath $installerPath | Out-Null
             $null
         }
