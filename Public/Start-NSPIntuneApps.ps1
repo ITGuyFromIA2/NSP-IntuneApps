@@ -616,7 +616,8 @@ function Start-NSPIntuneApps {
                                                 Write-Host ("=== Master group {0} ===" -f ($entries.Count + 1)) -ForegroundColor Cyan
                                                 $target = Invoke-NSPAssignmentTargetPicker -TenantId $registration.TenantId -ClientId $registration.ClientId -KnownGroups $knownGroups
                                                 $modeAndIntent = Read-NSPAssignmentModeAndIntent -TargetType $target.TargetType
-                                                $entries.Add(@{ TargetType = $target.TargetType; GroupId = $target.Id; GroupDisplayName = $target.DisplayName; Mode = $modeAndIntent.Mode; Intent = $modeAndIntent.Intent })
+                                                $filter = Read-NSPAssignmentFilterChoice -TenantId $registration.TenantId -ClientId $registration.ClientId -Mode $modeAndIntent.Mode
+                                                $entries.Add(@{ TargetType = $target.TargetType; GroupId = $target.Id; GroupDisplayName = $target.DisplayName; Mode = $modeAndIntent.Mode; Intent = $modeAndIntent.Intent; FilterDisplayName = $filter.FilterDisplayName; FilterMode = $filter.FilterMode })
                                                 $addAnother = Read-NSPMenuChoice -Prompt 'Add another master group? [Y/N]' -Allowed @('Y', 'N') -Default 'N'
                                             } while ($addAnother -eq 'Y')
 
@@ -660,7 +661,8 @@ function Start-NSPIntuneApps {
                                                     Write-Host ("=== Override group {0} ===" -f ($entries.Count + 1)) -ForegroundColor Cyan
                                                     $target = Invoke-NSPAssignmentTargetPicker -TenantId $registration.TenantId -ClientId $registration.ClientId -KnownGroups $knownGroups
                                                     $modeAndIntent = Read-NSPAssignmentModeAndIntent -TargetType $target.TargetType
-                                                    $entries.Add(@{ TargetType = $target.TargetType; GroupId = $target.Id; GroupDisplayName = $target.DisplayName; Mode = $modeAndIntent.Mode; Intent = $modeAndIntent.Intent })
+                                                    $filter = Read-NSPAssignmentFilterChoice -TenantId $registration.TenantId -ClientId $registration.ClientId -Mode $modeAndIntent.Mode
+                                                    $entries.Add(@{ TargetType = $target.TargetType; GroupId = $target.Id; GroupDisplayName = $target.DisplayName; Mode = $modeAndIntent.Mode; Intent = $modeAndIntent.Intent; FilterDisplayName = $filter.FilterDisplayName; FilterMode = $filter.FilterMode })
                                                     $addAnother = Read-NSPMenuChoice -Prompt "Add another group to this app's override? [Y/N]" -Allowed @('Y', 'N') -Default 'N'
                                                 } while ($addAnother -eq 'Y')
 
@@ -702,25 +704,9 @@ function Start-NSPIntuneApps {
                                     $mode = $modeAndIntent.Mode
                                     $intent = $modeAndIntent.Intent
 
-                                    $filterDisplayName = $null
-                                    $filterMode = $null
-                                    # Every app in this tool's inventory is a Win32 LOB app (Get-NSPIntuneAppInventory
-                                    # filters to isof('microsoft.graph.win32LobApp')), which is Windows-only - so
-                                    # 'windows10AndLater' is the only platform a filter here could ever match.
-                                    $knownFilters = if ($mode -eq 'Include') { @(Get-NSPIntuneAssignmentFilterList -TenantId $registration.TenantId -ClientId $registration.ClientId -Platform 'windows10AndLater') } else { @() }
-                                    if ($mode -eq 'Include' -and @($knownFilters).Count -gt 0) {
-                                        Write-Host 'Scope by an existing assignment filter? (Build one via Targeting & Filters > Build and create an assignment filter, or deploy the standard set via Targeting & Filters > Deploy the standard cookie-cutter assignment filter set, if you need a new one.)' -ForegroundColor Cyan
-                                        for ($index = 0; $index -lt $knownFilters.Count; $index++) { Write-Host ("  [{0}] {1} ({2})" -f ($index + 1), $knownFilters[$index].DisplayName, $knownFilters[$index].Platform) }
-                                        Write-Host '  [N] No filter'
-                                        $filterAllowed = @(@(1..$knownFilters.Count | ForEach-Object { [string]$_ }) + 'N')
-                                        $filterChoice = Read-NSPMenuChoice -Prompt 'Filter' -Allowed $filterAllowed -Default 'N'
-                                        if ($filterChoice -ne 'N') {
-                                            $filterDisplayName = $knownFilters[[int]$filterChoice - 1].DisplayName
-                                            Write-Host '[1] Include  [2] Exclude'
-                                            $filterModeChoice = Read-NSPMenuChoice -Prompt 'Filter mode' -Allowed @('1', '2') -Default '1'
-                                            $filterMode = if ($filterModeChoice -eq '2') { 'Exclude' } else { 'Include' }
-                                        }
-                                    }
+                                    $filter = Read-NSPAssignmentFilterChoice -TenantId $registration.TenantId -ClientId $registration.ClientId -Mode $mode
+                                    $filterDisplayName = $filter.FilterDisplayName
+                                    $filterMode = $filter.FilterMode
 
                                     $assignArgs = @{
                                         IntuneObjectId = $targetApp.Id; AppDisplayName = $targetApp.DisplayName
