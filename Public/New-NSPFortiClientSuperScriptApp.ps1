@@ -7,12 +7,20 @@ function New-NSPFortiClientSuperScriptApp {
         The superscript is a self-contained, versioned, multi-target (GPO/PDQ/Intune) deployment
         engine - all real install/detect/uninstall logic already lives inside it, dispatched by its
         own -Mode switch. IntuneDeploy/IntuneUninstall already use Win32's native install-command
-        exit-code contract (0 success, 3010 soft reboot mid-upgrade, 1 failure); IntuneDetect
-        already follows Intune's own script-detection convention (exit 0 + non-empty stdout =
-        detected). This function does no parsing of the superscript's contents and does not invoke
-        SuperScriptBuilder itself - it takes an already-built <Abbrev>_FortiClient_Upgrade.ps1 and
-        wraps it: copies it into Source/, writes three one-line mode-dispatch scripts, and a
-        _SplitScriptSettings.ps1.
+        exit-code contract (0 success, 3010 soft reboot mid-upgrade, 1 failure). This function does
+        not invoke SuperScriptBuilder itself - it takes an already-built
+        <Abbrev>_FortiClient_Upgrade.ps1 and wraps it: copies it into Source/, writes the install
+        and uninstall mode-dispatch scripts, copies the builder's companion detection script, and
+        writes a _SplitScriptSettings.ps1.
+
+        Detection cannot dispatch to the superscript's own -Mode IntuneDetect: Intune uploads the
+        detection script by itself and runs it from the Intune Management Extension's folder,
+        where the package content (and so the superscript) is not present. Build-SuperScript.ps1
+        emits a standalone Detect_<Abbrev>_FortiClientVPN.ps1 for exactly this reason; it is found
+        next to the superscript or in a staged INTUNE-FortiClient-<Abbrev>\Detect folder there,
+        or passed with -DetectScriptPath. Its $SuperScriptBuiltUtc stamp must match the
+        superscript's, since a stale companion would check for the previous build's target
+        version and config hash.
 
         SetupType is 'PoSH_sysnative' and detection runs 64-bit, matching Apps/FortiClient_
         ImportConfig's own documented reasoning (see Resolve-NSPAppBuildPlan) - the superscript
@@ -31,6 +39,7 @@ function New-NSPFortiClientSuperScriptApp {
     param(
         [Parameter(Mandatory)][string]$RepoRoot,
         [string]$SuperScriptPath,
+        [string]$DetectScriptPath,
         [string]$ClientAbbrev,
         [string]$DisplayName,
         [string]$OutputRoot,
@@ -54,6 +63,24 @@ function New-NSPFortiClientSuperScriptApp {
     if ($ClientAbbrev -match '[^A-Za-z0-9_-]') { throw 'ClientAbbrev may only contain letters, digits, underscore, and hyphen.' }
     if ([string]::IsNullOrWhiteSpace($DisplayName)) { $DisplayName = "FortiClient - $ClientAbbrev" }
 
+    if ([string]::IsNullOrWhiteSpace($DetectScriptPath)) {
+        $superScriptDir = Split-Path -Path $SuperScriptPath -Parent
+        $detectFileName = "Detect_${ClientAbbrev}_FortiClientVPN.ps1"
+        $DetectScriptPath = @(
+            (Join-Path $superScriptDir $detectFileName)
+            (Join-Path $superScriptDir "INTUNE-FortiClient-$ClientAbbrev\Detect\$detectFileName")
+        ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if (-not $DetectScriptPath) { throw "Companion detection script $detectFileName was not found next to the SuperScript or in its INTUNE-FortiClient-$ClientAbbrev\Detect folder. Pass -DetectScriptPath with the one Build-SuperScript.ps1 emitted for this build." }
+    } elseif (-not (Test-Path -LiteralPath $DetectScriptPath -PathType Leaf)) {
+        throw "Detection script not found: $DetectScriptPath"
+    }
+    $buildStampPattern = "(?m)^\`$SuperScriptBuiltUtc\s*=\s*'([^']+)'"
+    $superScriptStamp = [regex]::Match((Get-Content -LiteralPath $SuperScriptPath -Raw), $buildStampPattern).Groups[1].Value
+    $detectStamp = [regex]::Match((Get-Content -LiteralPath $DetectScriptPath -Raw), $buildStampPattern).Groups[1].Value
+    if ($superScriptStamp -and $detectStamp -ne $superScriptStamp) {
+        throw "Detection script $DetectScriptPath was built at '$detectStamp', but the SuperScript was built at '$superScriptStamp'. Use the companion detection script from the same build."
+    }
+
     if (-not $OutputRoot) { $OutputRoot = if (Test-NSPPublicUpstreamRepository -RepoRoot $RepoRoot) { Join-Path $RepoRoot 'Config\Local\GeneratedApps' } else { Join-Path $RepoRoot 'Apps' } }
 
     $id = "FortiClient-$ClientAbbrev"
@@ -76,11 +103,10 @@ function New-NSPFortiClientSuperScriptApp {
 
     $deployWrapper = @($wrapperHeader, "& `"`$PSScriptRoot\$superScriptFileName`" -Mode IntuneDeploy", 'exit $LASTEXITCODE') -join "`r`n"
     $uninstallWrapper = @($wrapperHeader, "& `"`$PSScriptRoot\$superScriptFileName`" -Mode IntuneUninstall", 'exit $LASTEXITCODE') -join "`r`n"
-    $detectWrapper = @($wrapperHeader, "& `"`$PSScriptRoot\$superScriptFileName`" -Mode IntuneDetect", 'exit $LASTEXITCODE') -join "`r`n"
 
     Set-Content -LiteralPath (Join-Path $sourceRoot "DownloadInstall_$id.ps1") -Value $deployWrapper -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $sourceRoot "Uninstall_$id.ps1") -Value $uninstallWrapper -Encoding UTF8
-    Set-Content -LiteralPath (Join-Path $detectRoot "Detect_$id.ps1") -Value $detectWrapper -Encoding UTF8
+    Copy-Item -LiteralPath $DetectScriptPath -Destination (Join-Path $detectRoot (Split-Path -Path $DetectScriptPath -Leaf)) -Force
 
     $settingsDisplayName = $DisplayName.Replace("'", "''")
     $settings = @"
