@@ -68,8 +68,9 @@ function Start-NSPIntuneApps {
             Items = @(
                 @{ Key = '1'; Id = 'AssignApp'; Label = 'Assign an app to a group, optionally scoped by a filter' }
                 @{ Key = '2'; Id = 'UpdateBuildProps'; Label = 'Update build-time properties for a deployed app' }
-                @{ Key = '3'; Id = 'RetireApps'; Label = 'Review and retire superseded apps (separate, explicitly approved)'; Color = 'Red' }
-                @{ Key = '4'; Id = 'DeleteApp'; Label = 'Delete an existing Intune app (irreversible)'; Color = 'Red' }
+                @{ Key = '3'; Id = 'SupersedeApp'; Label = 'Supersede an existing app with a newer one (e.g. a legacy, non-NSP-managed app)' }
+                @{ Key = '4'; Id = 'RetireApps'; Label = 'Review and retire superseded apps (separate, explicitly approved)'; Color = 'Red' }
+                @{ Key = '5'; Id = 'DeleteApp'; Label = 'Delete an existing Intune app (irreversible)'; Color = 'Red' }
             )
         }
         '7' = @{
@@ -761,6 +762,57 @@ function Start-NSPIntuneApps {
                                                     Write-Host 'No changes were made.' -ForegroundColor Yellow
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                            'SupersedeApp' {
+                                $registrationPath = Join-Path $RepoRoot 'Config\Local\GraphAppRegistration.json'
+                                $inventoryRoot = Join-Path $RepoRoot '.nsp-intuneapps\inventory'
+                                $latestInventory = if (Test-Path -LiteralPath $inventoryRoot) { Get-ChildItem -LiteralPath $inventoryRoot -Filter '*.json' -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 } else { $null }
+                                if (-not (Test-Path -LiteralPath $registrationPath)) {
+                                    Write-Warning 'No tenant app registration is recorded. Use Setup > Register/verify the tenant app registration first.'
+                                } elseif (-not $latestInventory) {
+                                    Write-Warning 'No saved Intune app inventory was found. Use Tenant Discovery > Save a read-only Intune app inventory first, so both apps can be picked by name.'
+                                } else {
+                                    $registration = Get-Content -LiteralPath $registrationPath -Raw | ConvertFrom-Json
+                                    $inventoryDocument = Get-Content -LiteralPath $latestInventory.FullName -Raw | ConvertFrom-Json
+                                    $apps = @($inventoryDocument.Apps | Sort-Object DisplayName)
+                                    if ([string]$inventoryDocument.TenantId -ne [string]$registration.TenantId) {
+                                        Write-Warning "The latest saved inventory is for tenant $($inventoryDocument.TenantId), but the recorded app registration is for $($registration.TenantId). Save a fresh inventory for this tenant first."
+                                    } elseif ($apps.Count -lt 2) {
+                                        Write-Warning 'The saved inventory has fewer than two apps, so there is nothing to relate.'
+                                    } else {
+                                        Write-Host "From inventory: $($latestInventory.Name) (saved $($latestInventory.LastWriteTime)). If the new app was created after that, save a fresh inventory first so it is listed." -ForegroundColor Cyan
+                                        for ($index = 0; $index -lt $apps.Count; $index++) {
+                                            $managedTag = if ([string]$apps[$index].Notes -match '\[NSP-IntuneApps:') { '' } else { ' (not NSP-managed)' }
+                                            Write-Host ("  [{0}] {1} | {2}{3}" -f ($index + 1), $apps[$index].DisplayName, $apps[$index].Id, $managedTag)
+                                        }
+                                        $appAllowed = @(1..$apps.Count | ForEach-Object { [string]$_ })
+                                        $newApp = $apps[[int](Read-NSPMenuChoice -Prompt 'NEW app (the one that takes over)' -Allowed $appAllowed) - 1]
+                                        $oldAllowed = @($appAllowed | Where-Object { $apps[[int]$_ - 1].Id -ne $newApp.Id })
+                                        $oldApp = $apps[[int](Read-NSPMenuChoice -Prompt 'OLD app (the one being superseded)' -Allowed $oldAllowed) - 1]
+
+                                        Write-Host '[1] Update  - devices with the old app get the new one installed over it; the old app is NOT uninstalled first. Use for a newer version of the same product.'
+                                        Write-Host '[2] Replace - Intune runs the OLD app''s uninstall command first, then installs the new one. Use only when swapping in a different product.' -ForegroundColor Yellow
+                                        $typeChoice = Read-NSPMenuChoice -Prompt 'Supersedence type' -Allowed @('1', '2') -Default '1'
+                                        $supersedenceType = if ($typeChoice -eq '2') { 'Replace' } else { 'Update' }
+
+                                        $supersedeArgs = @{
+                                            NewIntuneObjectId = $newApp.Id; NewAppDisplayName = $newApp.DisplayName
+                                            SupersededIntuneObjectId = $oldApp.Id; SupersededAppDisplayName = $oldApp.DisplayName
+                                            SupersedenceType = $supersedenceType; TenantId = $registration.TenantId; ClientId = $registration.ClientId
+                                        }
+                                        Add-NSPIntuneWin32AppSupersedence @supersedeArgs | Format-List
+                                        Write-Host "Note: this sets the supersedence list on '$($newApp.DisplayName)'. Use it on a newly created app; if that app already supersedes something, add the relationship in the Intune portal instead so the existing one is kept." -ForegroundColor DarkGray
+                                        $executeChoice = Read-NSPMenuChoice -Prompt "$supersedenceType-supersede '$($oldApp.DisplayName)' with '$($newApp.DisplayName)' now? [Y/N]" -Allowed @('Y', 'N') -Default 'N'
+                                        if ($executeChoice -eq 'Y') {
+                                            $result = Add-NSPIntuneWin32AppSupersedence @supersedeArgs -Execute -Confirm:$false
+                                            $result | Format-List
+                                            $retireHint = if ([string]$oldApp.Notes -match '\[NSP-IntuneApps:') { 'App Actions > Review and retire superseded apps' } else { 'App Actions > Delete an existing Intune app; the retire review only lists NSP-managed apps' }
+                                            Write-Host "Once devices report '$($newApp.DisplayName)' installed, remove '$($oldApp.DisplayName)''s assignments and retire it ($retireHint)." -ForegroundColor Cyan
+                                        } else {
+                                            Write-Host 'No changes were made.' -ForegroundColor Yellow
                                         }
                                     }
                                 }
